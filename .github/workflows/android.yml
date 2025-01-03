@@ -50,6 +50,6 @@ jobs:
         name: ${{ github.ref_name }}
         prerelease: false
         generateReleaseNotes: true
-        artifacts: app/build/outputs/apk/release/app-release.apk, app/manifest.json, app/karoo-reminder.png
+        artifacts: app/build/outputs/apk/release/app-release.apk, app/manifest.json, app/karoo-kxradar.png
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

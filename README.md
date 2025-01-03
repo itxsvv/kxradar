@@ -17,5 +17,5 @@ long-press the `app-release.apk` link and share it with the Hammerhead Companion
 Official SDK
 [karoo-ext source](https://github.com/hammerheadnav/karoo-ext)
 Specail thanks for examples to timklge
-[timklge github](https://github.com/timklge?tab=repositories)
+[github](https://github.com/timklge?tab=repositories)
 

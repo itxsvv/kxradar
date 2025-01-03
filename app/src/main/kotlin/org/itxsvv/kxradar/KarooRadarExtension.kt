@@ -51,7 +51,7 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.1") {
                 }
                 .collect({ (values, settings) ->
                     val threatLevel = values[DataType.Field.RADAR_THREAT_LEVEL] ?: 0.0
-                    if (!radarThreat && threatLevel > 0) {
+                    if (settings.enabled && !radarThreat && threatLevel > 0) {
                         Log.i(TAG, "Beep ${settings.threatLevelDur} ${settings.threatLevelFreq}")
                         karooSystem.dispatch(
                             PlayBeepPattern(
