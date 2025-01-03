@@ -6,7 +6,8 @@
 Hammerhead Karoo extension which allow to configure radar alerts
 
 ## Requirements
-You must disable default radar sound in Karoo settings 
+You must disable default radar sound in Karoo settings
+Go to Profiles -> Your profile -> Audio Alerts -> Disable RADAR
 
 ## Installation
 Karoo 3
