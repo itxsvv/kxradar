@@ -5,20 +5,30 @@ import io.hammerhead.karooext.KarooSystemService
 import io.hammerhead.karooext.extension.KarooExtension
 import io.hammerhead.karooext.models.DataType
 import io.hammerhead.karooext.models.PlayBeepPattern
+import io.hammerhead.karooext.models.RideState
 import io.hammerhead.karooext.models.StreamState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
+import kotlin.time.Duration
 
-class KarooRadarExtension : KarooExtension("kxradar", "1.0.1") {
+class KarooRadarExtension : KarooExtension("kxradar", "1.0.2") {
     companion object {
         const val TAG = "kxradar"
     }
-
+    private var targets = mapOf(
+        DataType.Field.RADAR_TARGET_1_RANGE to false,
+        DataType.Field.RADAR_TARGET_2_RANGE to false,
+        DataType.Field.RADAR_TARGET_3_RANGE to false,
+        DataType.Field.RADAR_TARGET_4_RANGE to false,
+        DataType.Field.RADAR_TARGET_5_RANGE to false,
+        DataType.Field.RADAR_TARGET_6_RANGE to false,
+        DataType.Field.RADAR_TARGET_7_RANGE to false,
+        DataType.Field.RADAR_TARGET_8_RANGE to false
+    )
     private lateinit var karooSystem: KarooSystemService
     private var serviceJob: Job? = null
     private var radarThreat: Boolean = false
@@ -32,32 +42,30 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.1") {
                     Log.i(TAG, "Connected")
                 }
             }
-
-            val prefs = dataStore.data.map { settingsJson ->
-                try {
-                    jsonWithUnknownKeys.decodeFromString<RadarSettings>(
-                        settingsJson[settingsKey] ?: RadarSettings.defaultSettings
-                    )
-                } catch (e: Throwable) {
-                    Log.e(TAG, "Failed to read preferences", e)
-                    RadarSettings()
-                }
-            }
+            val prefs = applicationContext.streamSettings()
+            val rideStateFlow = karooSystem.streamRideState()
 
             karooSystem.streamDataFlow(DataType.Type.RADAR)
                 .mapNotNull { (it as? StreamState.Streaming)?.dataPoint?.values }
-                .combine(prefs) {
-                    values, settings -> values to settings
+                .combine(rideStateFlow) { values, rideState ->
+                    values to rideState
                 }
-                .collect({ (values, settings) ->
+                .combine(prefs) { (values, rideState), settings ->
+                    Triple(values, rideState, settings)
+                }
+                .collect({ (values, rideState, settings) ->
                     val threatLevel = values[DataType.Field.RADAR_THREAT_LEVEL] ?: 0.0
-                    if (settings.enabled && !radarThreat && threatLevel > 0) {
-                        Log.i(TAG, "Beep ${settings.threatLevelDur} ${settings.threatLevelFreq}")
-                        karooSystem.dispatch(
-                            PlayBeepPattern(
-                                listOf(PlayBeepPattern.Tone(settings.threatLevelFreq, settings.threatLevelDur))
-                            )
-                        )
+                    if (settings.enabled &&
+                        ((settings.inRideOnly && rideState is RideState.Recording) || !settings.inRideOnly)
+                    ) {
+                        if (!radarThreat && threatLevel > 0) {
+                            Log.i(TAG, "Threar")
+                            karooSystem.beep(settings.threatLevelFreq, settings.threatLevelDur)
+                        }
+                        if (radarThreat && threatLevel == 0.0) {
+                            Log.i(TAG, "Clear")
+                            karooSystem.beep(settings.threaPassedtLevelFreq, settings.threatPassedLevelDur)
+                        }
                     }
                     radarThreat = threatLevel != 0.0
                 })

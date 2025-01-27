@@ -6,6 +6,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import io.hammerhead.karooext.KarooSystemService
 import io.hammerhead.karooext.models.OnStreamState
+import io.hammerhead.karooext.models.PlayBeepPattern
+import io.hammerhead.karooext.models.RideState
 import io.hammerhead.karooext.models.StreamState
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.trySendBlocking
@@ -25,12 +27,19 @@ val settingsKey = stringPreferencesKey("settings")
 data class RadarSettings(
     val threatLevelFreq: Int,
     val threatLevelDur: Int,
+    val threaPassedtLevelFreq: Int,
+    val threatPassedLevelDur: Int,
+    val inRideOnly: Boolean = false,
     val enabled: Boolean = true,
-){
+) {
     companion object {
         val defaultSettings = Json.encodeToString(RadarSettings())
     }
-    constructor() : this(200, 100, true)
+
+    constructor() : this(
+        200, 100, 0, 0,
+        false, true
+    )
 }
 
 suspend fun saveSettings(context: Context, settings: RadarSettings) {
@@ -45,7 +54,7 @@ fun Context.streamSettings(): Flow<RadarSettings> {
             jsonWithUnknownKeys.decodeFromString<RadarSettings>(
                 settingsJson[settingsKey] ?: RadarSettings.defaultSettings
             )
-        } catch(e: Throwable){
+        } catch (e: Throwable) {
             Log.e(KarooRadarExtension.TAG, "Failed to read preferences", e)
             RadarSettings()
         }
@@ -61,4 +70,23 @@ fun KarooSystemService.streamDataFlow(dataTypeId: String): Flow<StreamState> {
             removeConsumer(listenerId)
         }
     }
+}
+
+fun KarooSystemService.streamRideState(): Flow<RideState> {
+    return callbackFlow {
+        val listenerId = addConsumer { rideState: RideState ->
+            trySendBlocking(rideState)
+        }
+        awaitClose {
+            removeConsumer(listenerId)
+        }
+    }
+}
+
+fun KarooSystemService.beep(freq: Int, duration: Int) {
+    dispatch(
+        PlayBeepPattern(
+            listOf(PlayBeepPattern.Tone(freq, duration))
+        )
+    )
 }

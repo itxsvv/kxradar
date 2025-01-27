@@ -13,12 +13,12 @@ Go to Profiles -> Your profile -> Audio Alerts -> Disable RADAR**\
 
 ## Installation
 Karoo 3
-1. [LINK](https://github.com/itxsvv/kxradar/releases/latest/download/app-release.apk)\
-Tap on the link and share app with Hammerhead Companion App
+1. [LINK to APK](https://github.com/itxsvv/kxradar/releases/latest/download/app-release.apk)\
+Share this link with Hammerhead Companion App
 
 Karoo 2:
 
-1. Download the apk from the [releases page](https://github.com/itxsvv/kxradar/releases)
+1. Download the APK from the [releases page](https://github.com/itxsvv/kxradar/releases)
 2. Set up your Karoo for sideloading. DC Rainmaker has a great [step-by-step guide](https://www.dcrainmaker.com/2021/02/how-to-sideload-android-apps-on-your-hammerhead-karoo-1-karoo-2.html).
 3. Install the app by running `adb install app-release.apk`.
 
