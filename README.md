@@ -1,20 +1,20 @@
-# Hammerhead Karoo radar sound extension
+# Radar Sound Extension for Hammerhead Karoo
 
 [![Build](https://github.com/itxsvv/kxradar/actions/workflows/android.yml/badge.svg)](https://github.com/itxsvv/kxradar/actions/workflows/android.yml)
 ![GitHub Downloads (specific asset, all releases)](https://img.shields.io/github/downloads/itxsvv/kxradar/app-release.apk)
 
-Hammerhead Karoo extension which allow to configure radar alerts
+Hammerhead Karoo extension, which allows configuring radar alerts.
 
 ## Requirements
-<font color="red">**You must disable default radar sound in Karoo settings</font>\
+<font color="red">**You must disable the default radar sound in the Karoo settings.</font>\
 Go to Profiles -> Your profile -> Audio Alerts -> Disable RADAR**\
 \
-![DisableAudioAlerts](audioalerts.png)
+![DisableAudioAlerts](audioalerts.jpg)
 
 ## Installation
 Karoo 3
 1. [LINK to APK](https://github.com/itxsvv/kxradar/releases/latest/download/app-release.apk)\
-Share this link with Hammerhead Companion App
+Share this link with the Hammerhead Companion App.
 
 Karoo 2:
 
@@ -23,7 +23,7 @@ Karoo 2:
 3. Install the app by running `adb install app-release.apk`.
 
 ## Usage
-Set frequency and duration of the sound and tap 'Save'\
+Set the frequency and duration of the sound, and tap ‘Save.’\
 ![Screenshot](kxradar_screen.png)
 
 

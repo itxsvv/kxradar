@@ -194,7 +194,7 @@ fun MainScreen() {
                 }
             )
             Spacer(modifier = Modifier.width(10.dp))
-            Text(modifier = Modifier.weight(1f), text = "In ride only")
+            Text(modifier = Modifier.weight(1f), text = "In-ride only")
         }
         FilledTonalButton(modifier = Modifier
             .fillMaxWidth()
