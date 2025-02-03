@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -29,7 +30,6 @@ import io.hammerhead.karooext.KarooSystemService
 import kotlinx.coroutines.launch
 import org.itxsvv.kxradar.*
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun MainScreen() {
     val pattern = remember { Regex("^\\d*\\d*\$") }
@@ -85,114 +85,40 @@ fun MainScreen() {
         Spacer(modifier = Modifier.size(1.dp))
         Text("Threat sound")
         uiThreatLevelPattern.forEachIndexed { index, beepPattern ->
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(3.dp),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            BeepPatternFields(
+                beepPattern = beepPattern,
+                index = index,
+                pattern = pattern,
+                onFreqChange = { newFreq ->
+                    uiThreatLevelPattern = uiThreatLevelPattern.toMutableList().apply {
+                        this[index] = this[index].copy(freq = newFreq)
+                    }
+                },
+                onDurationChange = { newDuration ->
+                    uiThreatLevelPattern = uiThreatLevelPattern.toMutableList().apply {
+                        this[index] = this[index].copy(duration = newDuration)
+                    }
+                },
+                onDelayChange = { newDelay ->
+                    uiThreatLevelPattern = uiThreatLevelPattern.toMutableList().apply {
+                        this[index] = this[index].copy(delay = newDelay)
+                    }
+                },
+                focusManager = focusManager
+            )
+            if (index < uiThreatLevelPattern.size - 1) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    horizontalArrangement = Arrangement.Center
                 ) {
-                    OutlinedTextField(
-                        value = beepPattern.freq.toString(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        onValueChange = { newText ->
-                            if (!newText.isEmpty() && newText.matches(pattern)) {
-                                uiThreatLevelPattern = uiThreatLevelPattern.toMutableList().apply {
-                                    this[index] = this[index].copy(freq = newText.toInt())
-                                }
-                            }
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .pointerInput(Unit) {
-                                detectTapGestures(
-                                    onDoubleTap = {
-                                        focusManager.clearFocus()
-                                        focusManager.moveFocus(FocusDirection.Enter)
-                                    }
-                                )
-                            },
-                        singleLine = true,
-                        label = { Text(text = "Freq.") }
-                    )
-                    OutlinedTextField(
-                        value = beepPattern.duration.toString(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        onValueChange = { newText ->
-                            if (!newText.isEmpty() && newText.matches(pattern)) {
-                                uiThreatLevelPattern = uiThreatLevelPattern.toMutableList().apply {
-                                    this[index] = this[index].copy(duration = newText.toInt())
-                                }
-                            }
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .pointerInput(Unit) {
-                                detectTapGestures(
-                                    onDoubleTap = {
-                                        focusManager.clearFocus()
-                                        focusManager.moveFocus(FocusDirection.Enter)
-                                    }
-                                )
-                            },
-                        singleLine = true,
-                        label = { Text(text = "Dur.") }
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp)) // Separación entre los bloques
-                if (index < uiThreatLevelPattern.size - 1) {
-                    var delayText by remember { mutableStateOf(beepPattern.delay.toString()) }
-                    OutlinedTextField(
-                        value = delayText,
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Number,
-                            imeAction = ImeAction.Done
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onDone = {
-                                if (beepPattern.delay < 300) {
-                                    uiThreatLevelPattern = uiThreatLevelPattern.toMutableList().apply {
-                                        this[index] = this[index].copy(delay = 300)
-                                    }
-                                    delayText = "300"
-                                }
-                                focusManager.clearFocus()
-                            }
-                        ),
-                        onValueChange = { newText ->
-                            if (!newText.isEmpty() && newText.matches(pattern)) {
-                                delayText = newText
-                                uiThreatLevelPattern = uiThreatLevelPattern.toMutableList().apply {
-                                    this[index] = this[index].copy(delay = newText.toInt())
-                                }
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .pointerInput(Unit) {
-                                detectTapGestures(
-                                    onDoubleTap = {
-                                        focusManager.clearFocus()
-                                        focusManager.moveFocus(FocusDirection.Enter)
-                                    }
-                                )
-                            }
-                            .onFocusChanged { focusState ->
-                                if (!focusState.isFocused && beepPattern.delay < 300) {
-                                    uiThreatLevelPattern = uiThreatLevelPattern.toMutableList().apply {
-                                        this[index] = this[index].copy(delay = 300)
-                                    }
-                                    delayText = "300"
-                                }
-                            },
-                        singleLine = true,
-                        label = { Text(text = "Delay") }
-                    )
+                    HorizontalDivider(modifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(Icons.Default.Add, contentDescription = "Plus")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    HorizontalDivider(modifier = Modifier.weight(1f))
                 }
             }
         }
@@ -208,7 +134,7 @@ fun MainScreen() {
                     }
                 }
             ) {
-                Icon(Icons.Default.Add, contentDescription = "")
+                Icon(Icons.Default.Add, contentDescription = "Add beep")
                 Spacer(modifier = Modifier.width(5.dp))
                 Text("Add beep")
             }
@@ -223,7 +149,7 @@ fun MainScreen() {
                 }
             }
         ) {
-            Icon(Icons.Default.PlayArrow, contentDescription = "")
+            Icon(Icons.Default.PlayArrow, contentDescription = "Play")
             Spacer(modifier = Modifier.width(5.dp))
             Text("Play")
         }
@@ -246,7 +172,7 @@ fun MainScreen() {
                 savedDialogVisible = true
             }
         }) {
-            Icon(Icons.Default.Done, contentDescription = "")
+            Icon(Icons.Default.Done, contentDescription = "Save")
             Spacer(modifier = Modifier.width(5.dp))
             Text("Save")
         }
@@ -274,6 +200,131 @@ fun MainScreen() {
                     }) { Text("OK") }
                 },
                 text = { Text("Settings saved successfully.") }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun BeepPatternFields(
+    beepPattern: BeepPattern,
+    index: Int,
+    pattern: Regex,
+    onFreqChange: (Int) -> Unit,
+    onDurationChange: (Int) -> Unit,
+    onDelayChange: (Int) -> Unit,
+    focusManager: FocusManager
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(3.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(0.dp, 0.dp, 0.dp, 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            OutlinedTextField(
+                value = beepPattern.freq.toString(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                onValueChange = { newText ->
+                    if (newText.isNotEmpty() && newText.matches(pattern)) {
+                        onFreqChange(newText.toInt())
+                    }
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onDoubleTap = {
+                                focusManager.clearFocus()
+                                focusManager.moveFocus(FocusDirection.Enter)
+                            }
+                        )
+                    },
+                singleLine = true,
+                label = { Text(text = "Freq.") }
+            )
+            OutlinedTextField(
+                value = beepPattern.duration.toString(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                onValueChange = { newText ->
+                    if (newText.isNotEmpty() && newText.matches(pattern)) {
+                        onDurationChange(newText.toInt())
+                    }
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onDoubleTap = {
+                                focusManager.clearFocus()
+                                focusManager.moveFocus(FocusDirection.Enter)
+                            }
+                        )
+                    },
+                singleLine = true,
+                label = { Text(text = "Dur.") }
+            )
+        }
+        if (index < 9) {
+            var delayText by remember { mutableStateOf(beepPattern.delay.toString()) }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                HorizontalDivider(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(Icons.Default.Add, contentDescription = "Plus")
+                Spacer(modifier = Modifier.width(8.dp))
+                HorizontalDivider(modifier = Modifier.weight(1f))
+            }
+            OutlinedTextField(
+                value = delayText,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        if (beepPattern.delay < 300) {
+                            onDelayChange(300)
+                            delayText = "300"
+                        }
+                        focusManager.clearFocus()
+                    }
+                ),
+                onValueChange = { newText ->
+                    if (newText.isNotEmpty() && newText.matches(pattern)) {
+                        delayText = newText
+                        onDelayChange(newText.toInt())
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onDoubleTap = {
+                                focusManager.clearFocus()
+                                focusManager.moveFocus(FocusDirection.Enter)
+                            }
+                        )
+                    }
+                    .onFocusChanged { focusState ->
+                        if (!focusState.isFocused && beepPattern.delay < 300) {
+                            onDelayChange(300)
+                            delayText = "300"
+                        }
+                    },
+                singleLine = true,
+                label = { Text(text = "Delay") }
             )
         }
     }
