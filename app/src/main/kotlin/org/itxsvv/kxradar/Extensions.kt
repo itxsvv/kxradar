@@ -24,11 +24,16 @@ val jsonWithUnknownKeys = Json { ignoreUnknownKeys = true }
 val settingsKey = stringPreferencesKey("settings")
 
 @Serializable
+data class BeepPattern(
+    val freq: Int,
+    val duration: Int,
+    val delay: Int
+)
+
+@Serializable
 data class RadarSettings(
-    val threatLevelFreq: Int,
-    val threatLevelDur: Int,
-    val threaPassedtLevelFreq: Int,
-    val threatPassedLevelDur: Int,
+    val threatLevelPattern: List<BeepPattern>,
+    val threatPassedLevelPattern: List<BeepPattern>,
     val inRideOnly: Boolean = false,
     val enabled: Boolean = true,
 ) {
@@ -37,7 +42,8 @@ data class RadarSettings(
     }
 
     constructor() : this(
-        200, 100, 0, 0,
+        listOf(BeepPattern(200, 100, 500)),
+        listOf(BeepPattern(0, 0, 500)),
         false, true
     )
 }
@@ -83,10 +89,9 @@ fun KarooSystemService.streamRideState(): Flow<RideState> {
     }
 }
 
-fun KarooSystemService.beep(freq: Int, duration: Int) {
-    dispatch(
-        PlayBeepPattern(
-            listOf(PlayBeepPattern.Tone(freq, duration))
-        )
-    )
+fun KarooSystemService.beep(pattern: List<BeepPattern>) {
+    pattern.forEach { beep ->
+        dispatch(PlayBeepPattern(listOf(PlayBeepPattern.Tone(beep.freq, beep.duration))))
+        Thread.sleep(beep.delay.toLong())
+    }
 }
