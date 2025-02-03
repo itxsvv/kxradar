@@ -212,7 +212,7 @@ fun MainScreen() {
             ) {
                 Icon(Icons.Default.Add, contentDescription = "")
                 Spacer(modifier = Modifier.width(5.dp))
-                Text("Añadir")
+                Text("Add beep")
             }
         }
         FilledTonalButton(
