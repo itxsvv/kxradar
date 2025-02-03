@@ -1,73 +1,56 @@
 package org.itxsvv.kxradar.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.hammerhead.karooext.KarooSystemService
-import io.hammerhead.karooext.models.PlayBeepPattern
 import kotlinx.coroutines.launch
-import org.itxsvv.kxradar.RadarSettings
-import org.itxsvv.kxradar.beep
-import org.itxsvv.kxradar.saveSettings
-import org.itxsvv.kxradar.streamSettings
+import org.itxsvv.kxradar.*
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun MainScreen() {
     val pattern = remember { Regex("^\\d*\\d*\$") }
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val karooSystem = remember { KarooSystemService(ctx) }
     var savedDialogVisible by remember { mutableStateOf(false) }
 
-    var uiThreatLevelFreq by remember { mutableStateOf(0) }
-    var uiThreatLevelDur by remember { mutableStateOf(0) }
-    var uiThreatPassedLevelFreq by remember { mutableStateOf(0) }
-    var uiThreatPassedLevelDur by remember { mutableStateOf(0) }
+    var uiThreatLevelPattern by remember { mutableStateOf(listOf(BeepPattern(200, 100, 0))) }
+    var uiThreatPassedLevelPattern by remember { mutableStateOf(listOf(BeepPattern(0, 0, 0))) }
     var uiInRideOnlyEnabled by remember { mutableStateOf(true) }
     var uiBeepEnabled by remember { mutableStateOf(true) }
 
     fun saveUISettings() {
         scope.launch {
             val radarSettings = RadarSettings(
-                threatLevelFreq = uiThreatLevelFreq,
-                threatLevelDur = uiThreatLevelDur,
-                threaPassedtLevelFreq = uiThreatPassedLevelFreq,
-                threatPassedLevelDur = uiThreatPassedLevelDur,
+                threatLevelPattern = uiThreatLevelPattern,
+                threatPassedLevelPattern = uiThreatPassedLevelPattern,
                 inRideOnly = uiInRideOnlyEnabled,
                 enabled = uiBeepEnabled
             )
@@ -77,10 +60,8 @@ fun MainScreen() {
 
     LaunchedEffect(Unit) {
         ctx.streamSettings().collect { settings ->
-            uiThreatLevelFreq = settings.threatLevelFreq
-            uiThreatLevelDur = settings.threatLevelDur
-            uiThreatPassedLevelFreq = settings.threaPassedtLevelFreq
-            uiThreatPassedLevelDur = settings.threatPassedLevelDur
+            uiThreatLevelPattern = settings.threatLevelPattern
+            uiThreatPassedLevelPattern = settings.threatPassedLevelPattern
             uiInRideOnlyEnabled = settings.inRideOnly
             uiBeepEnabled = settings.enabled
         }
@@ -90,100 +71,163 @@ fun MainScreen() {
         karooSystem.connect()
     }
 
+    val scrollState = rememberScrollState()
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxSize()
             .padding(2.dp)
-            .background(MaterialTheme.colorScheme.background),
+            .background(MaterialTheme.colorScheme.background)
+            .verticalScroll(scrollState)
+            .clickable { focusManager.clearFocus() },
         verticalArrangement = Arrangement.spacedBy(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.size(1.dp))
         Text("Threat sound")
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
-        ) {
-            OutlinedTextField(
-                value = uiThreatLevelFreq.toString(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                onValueChange = { newText ->
-                    if (!newText.isEmpty() && newText.matches(pattern)) {
-                        uiThreatLevelFreq = newText.replace("\n", "").toInt()
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                label = { Text(text = "Freq.") }
-
-            )
-            OutlinedTextField(
-                value = uiThreatLevelDur.toString(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                onValueChange = { newText ->
-                    if (!newText.isEmpty() && newText.matches(pattern)) {
-                        uiThreatLevelDur = (newText.replace("\n", "")).toInt()
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                label = { Text(text = "Dur.") }
-            )
-            FilledTonalButton(modifier = Modifier
-                .weight(0.8f)
-                .height(65.dp), shape = RoundedCornerShape(8.dp), onClick = {
-                scope.launch {
-                    karooSystem.beep(uiThreatLevelFreq, uiThreatLevelDur)
+        uiThreatLevelPattern.forEachIndexed { index, beepPattern ->
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(3.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    OutlinedTextField(
+                        value = beepPattern.freq.toString(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        onValueChange = { newText ->
+                            if (!newText.isEmpty() && newText.matches(pattern)) {
+                                uiThreatLevelPattern = uiThreatLevelPattern.toMutableList().apply {
+                                    this[index] = this[index].copy(freq = newText.toInt())
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onDoubleTap = {
+                                        focusManager.clearFocus()
+                                        focusManager.moveFocus(FocusDirection.Enter)
+                                    }
+                                )
+                            },
+                        singleLine = true,
+                        label = { Text(text = "Freq.") }
+                    )
+                    OutlinedTextField(
+                        value = beepPattern.duration.toString(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        onValueChange = { newText ->
+                            if (!newText.isEmpty() && newText.matches(pattern)) {
+                                uiThreatLevelPattern = uiThreatLevelPattern.toMutableList().apply {
+                                    this[index] = this[index].copy(duration = newText.toInt())
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onDoubleTap = {
+                                        focusManager.clearFocus()
+                                        focusManager.moveFocus(FocusDirection.Enter)
+                                    }
+                                )
+                            },
+                        singleLine = true,
+                        label = { Text(text = "Dur.") }
+                    )
                 }
-            }) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "")
+                Spacer(modifier = Modifier.height(8.dp)) // Separación entre los bloques
+                if (index < uiThreatLevelPattern.size - 1) {
+                    var delayText by remember { mutableStateOf(beepPattern.delay.toString()) }
+                    OutlinedTextField(
+                        value = delayText,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                if (beepPattern.delay < 300) {
+                                    uiThreatLevelPattern = uiThreatLevelPattern.toMutableList().apply {
+                                        this[index] = this[index].copy(delay = 300)
+                                    }
+                                    delayText = "300"
+                                }
+                                focusManager.clearFocus()
+                            }
+                        ),
+                        onValueChange = { newText ->
+                            if (!newText.isEmpty() && newText.matches(pattern)) {
+                                delayText = newText
+                                uiThreatLevelPattern = uiThreatLevelPattern.toMutableList().apply {
+                                    this[index] = this[index].copy(delay = newText.toInt())
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onDoubleTap = {
+                                        focusManager.clearFocus()
+                                        focusManager.moveFocus(FocusDirection.Enter)
+                                    }
+                                )
+                            }
+                            .onFocusChanged { focusState ->
+                                if (!focusState.isFocused && beepPattern.delay < 300) {
+                                    uiThreatLevelPattern = uiThreatLevelPattern.toMutableList().apply {
+                                        this[index] = this[index].copy(delay = 300)
+                                    }
+                                    delayText = "300"
+                                }
+                            },
+                        singleLine = true,
+                        label = { Text(text = "Delay") }
+                    )
+                }
             }
         }
-        Text("All clear sound (0 disable)")
-        Row(
+        if (uiThreatLevelPattern.size < 10) {
+            FilledTonalButton(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                onClick = {
+                    uiThreatLevelPattern = uiThreatLevelPattern.toMutableList().apply {
+                        this[lastIndex] = this[lastIndex].copy(delay = 500)
+                        add(BeepPattern(200, 100, 0))
+                    }
+                }
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "")
+                Spacer(modifier = Modifier.width(5.dp))
+                Text("Añadir")
+            }
+        }
+        FilledTonalButton(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
-        ) {
-            OutlinedTextField(
-                value = uiThreatPassedLevelFreq.toString(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                onValueChange = { newText ->
-                    if (!newText.isEmpty() && newText.matches(pattern)) {
-                        uiThreatPassedLevelFreq = newText.replace("\n", "").toInt()
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                label = { Text(text = "Freq.") }
-            )
-            OutlinedTextField(
-                value = uiThreatPassedLevelDur.toString(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                onValueChange = { newText ->
-                    if (!newText.isEmpty() && newText.matches(pattern)) {
-                        uiThreatPassedLevelDur = (newText.replace("\n", "")).toInt()
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                label = { Text(text = "Dur.") }
-            )
-            FilledTonalButton(modifier = Modifier
-                .weight(0.8f)
-                .height(65.dp), shape = RoundedCornerShape(8.dp), onClick = {
+                .height(50.dp),
+            onClick = {
                 scope.launch {
-                    karooSystem.beep(uiThreatPassedLevelFreq, uiThreatPassedLevelDur)
+                    karooSystem.beep(uiThreatLevelPattern)
                 }
-            }) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "")
             }
+        ) {
+            Icon(Icons.Default.PlayArrow, contentDescription = "")
+            Spacer(modifier = Modifier.width(5.dp))
+            Text("Play")
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(
@@ -235,11 +279,4 @@ fun MainScreen() {
             )
         }
     }
-
 }
-
-
-
-
-
-

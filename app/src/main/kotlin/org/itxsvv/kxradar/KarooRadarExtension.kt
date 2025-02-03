@@ -4,7 +4,6 @@ import android.util.Log
 import io.hammerhead.karooext.KarooSystemService
 import io.hammerhead.karooext.extension.KarooExtension
 import io.hammerhead.karooext.models.DataType
-import io.hammerhead.karooext.models.PlayBeepPattern
 import io.hammerhead.karooext.models.RideState
 import io.hammerhead.karooext.models.StreamState
 import kotlinx.coroutines.CoroutineScope
@@ -13,7 +12,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
-import kotlin.time.Duration
 
 class KarooRadarExtension : KarooExtension("kxradar", "1.0.2") {
     companion object {
@@ -60,11 +58,11 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.2") {
                     ) {
                         if (!radarThreat && threatLevel > 0) {
                             Log.i(TAG, "Threar")
-                            karooSystem.beep(settings.threatLevelFreq, settings.threatLevelDur)
+                            karooSystem.beep(settings.threatLevelPattern)
                         }
                         if (radarThreat && threatLevel == 0.0) {
                             Log.i(TAG, "Clear")
-                            karooSystem.beep(settings.threaPassedtLevelFreq, settings.threatPassedLevelDur)
+                            karooSystem.beep(settings.threatPassedLevelPattern)
                         }
                     }
                     radarThreat = threatLevel != 0.0
