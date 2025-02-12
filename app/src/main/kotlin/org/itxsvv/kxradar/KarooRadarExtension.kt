@@ -4,7 +4,6 @@ import android.util.Log
 import io.hammerhead.karooext.KarooSystemService
 import io.hammerhead.karooext.extension.KarooExtension
 import io.hammerhead.karooext.models.DataType
-import io.hammerhead.karooext.models.PlayBeepPattern
 import io.hammerhead.karooext.models.RideState
 import io.hammerhead.karooext.models.StreamState
 import kotlinx.coroutines.CoroutineScope
@@ -13,25 +12,16 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
-import kotlin.time.Duration
 
-class KarooRadarExtension : KarooExtension("kxradar", "1.0.2") {
+class KarooRadarExtension : KarooExtension("kxradar", "1.0.3") {
     companion object {
         const val TAG = "kxradar"
     }
-    private var targets = mapOf(
-        DataType.Field.RADAR_TARGET_1_RANGE to false,
-        DataType.Field.RADAR_TARGET_2_RANGE to false,
-        DataType.Field.RADAR_TARGET_3_RANGE to false,
-        DataType.Field.RADAR_TARGET_4_RANGE to false,
-        DataType.Field.RADAR_TARGET_5_RANGE to false,
-        DataType.Field.RADAR_TARGET_6_RANGE to false,
-        DataType.Field.RADAR_TARGET_7_RANGE to false,
-        DataType.Field.RADAR_TARGET_8_RANGE to false
-    )
+    private var DELAY_BEEP_ALL_CLEAR = 2000
     private lateinit var karooSystem: KarooSystemService
     private var serviceJob: Job? = null
-    private var radarThreat: Boolean = false
+    private var radarThreat = false
+    private var passedDelay = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -44,7 +34,6 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.2") {
             }
             val prefs = applicationContext.streamSettings()
             val rideStateFlow = karooSystem.streamRideState()
-
             karooSystem.streamDataFlow(DataType.Type.RADAR)
                 .mapNotNull { (it as? StreamState.Streaming)?.dataPoint?.values }
                 .combine(rideStateFlow) { values, rideState ->
@@ -59,12 +48,17 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.2") {
                         ((settings.inRideOnly && rideState is RideState.Recording) || !settings.inRideOnly)
                     ) {
                         if (!radarThreat && threatLevel > 0) {
-                            Log.i(TAG, "Threar")
-                            karooSystem.beep(settings.threatLevelFreq, settings.threatLevelDur)
+                            Log.i(TAG, "Threat detected")
+                            passedDelay = 0
+                            karooSystem.beep(settings.threatBeep.frequency, settings.threatBeep.duration)
+                        }
+                        if(passedDelay > 0 && System.currentTimeMillis() - passedDelay > DELAY_BEEP_ALL_CLEAR) {
+                            Log.i(TAG, "All-clear")
+                            passedDelay = 0;
+                            karooSystem.beep(settings.passedBeep.frequency, settings.passedBeep.duration)
                         }
                         if (radarThreat && threatLevel == 0.0) {
-                            Log.i(TAG, "Clear")
-                            karooSystem.beep(settings.threaPassedtLevelFreq, settings.threatPassedLevelDur)
+                            passedDelay = System.currentTimeMillis()
                         }
                     }
                     radarThreat = threatLevel != 0.0

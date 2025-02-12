@@ -21,14 +21,18 @@ import kotlinx.serialization.json.Json
 
 val jsonWithUnknownKeys = Json { ignoreUnknownKeys = true }
 
-val settingsKey = stringPreferencesKey("settings")
+val settingsKey = stringPreferencesKey("settings_v2")
+
+@Serializable
+data class Beep(
+    var frequency: Int,
+    var duration: Int,
+)
 
 @Serializable
 data class RadarSettings(
-    val threatLevelFreq: Int,
-    val threatLevelDur: Int,
-    val threaPassedtLevelFreq: Int,
-    val threatPassedLevelDur: Int,
+    val threatBeep: Beep,
+    val passedBeep: Beep,
     val inRideOnly: Boolean = false,
     val enabled: Boolean = true,
 ) {
@@ -37,7 +41,8 @@ data class RadarSettings(
     }
 
     constructor() : this(
-        200, 100, 0, 0,
+        Beep(200, 100),
+        Beep(0, 100),
         false, true
     )
 }
