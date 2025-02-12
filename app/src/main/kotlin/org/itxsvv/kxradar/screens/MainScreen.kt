@@ -1,6 +1,7 @@
 package org.itxsvv.kxradar.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,7 +16,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -34,13 +34,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.hammerhead.karooext.KarooSystemService
-import io.hammerhead.karooext.models.PlayBeepPattern
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import org.itxsvv.kxradar.Beep
 import org.itxsvv.kxradar.RadarSettings
 import org.itxsvv.kxradar.beep
 import org.itxsvv.kxradar.saveSettings
@@ -51,23 +54,20 @@ fun MainScreen() {
     val pattern = remember { Regex("^\\d*\\d*\$") }
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val karooSystem = remember { KarooSystemService(ctx) }
     var savedDialogVisible by remember { mutableStateOf(false) }
 
-    var uiThreatLevelFreq by remember { mutableStateOf(0) }
-    var uiThreatLevelDur by remember { mutableStateOf(0) }
-    var uiThreatPassedLevelFreq by remember { mutableStateOf(0) }
-    var uiThreatPassedLevelDur by remember { mutableStateOf(0) }
+    var uiThreatBeep by remember { mutableStateOf(Beep(200, 100)) }
+    var uiPassedBeep by remember { mutableStateOf(Beep(0, 0)) }
     var uiInRideOnlyEnabled by remember { mutableStateOf(true) }
     var uiBeepEnabled by remember { mutableStateOf(true) }
 
     fun saveUISettings() {
         scope.launch {
             val radarSettings = RadarSettings(
-                threatLevelFreq = uiThreatLevelFreq,
-                threatLevelDur = uiThreatLevelDur,
-                threaPassedtLevelFreq = uiThreatPassedLevelFreq,
-                threatPassedLevelDur = uiThreatPassedLevelDur,
+                threatBeep = uiThreatBeep,
+                passedBeep = uiPassedBeep,
                 inRideOnly = uiInRideOnlyEnabled,
                 enabled = uiBeepEnabled
             )
@@ -77,10 +77,8 @@ fun MainScreen() {
 
     LaunchedEffect(Unit) {
         ctx.streamSettings().collect { settings ->
-            uiThreatLevelFreq = settings.threatLevelFreq
-            uiThreatLevelDur = settings.threatLevelDur
-            uiThreatPassedLevelFreq = settings.threaPassedtLevelFreq
-            uiThreatPassedLevelDur = settings.threatPassedLevelDur
+            uiThreatBeep = settings.threatBeep
+            uiPassedBeep = settings.passedBeep
             uiInRideOnlyEnabled = settings.inRideOnly
             uiBeepEnabled = settings.enabled
         }
@@ -95,96 +93,28 @@ fun MainScreen() {
             .fillMaxWidth()
             .fillMaxSize()
             .padding(2.dp)
-            .background(MaterialTheme.colorScheme.background),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .background(MaterialTheme.colorScheme.background)
+            .clickable { focusManager.clearFocus() },
+        verticalArrangement = Arrangement.spacedBy(2.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.size(1.dp))
         Text("Threat sound")
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
-        ) {
-            OutlinedTextField(
-                value = uiThreatLevelFreq.toString(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                onValueChange = { newText ->
-                    if (!newText.isEmpty() && newText.matches(pattern)) {
-                        uiThreatLevelFreq = newText.replace("\n", "").toInt()
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                label = { Text(text = "Freq.") }
-
-            )
-            OutlinedTextField(
-                value = uiThreatLevelDur.toString(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                onValueChange = { newText ->
-                    if (!newText.isEmpty() && newText.matches(pattern)) {
-                        uiThreatLevelDur = (newText.replace("\n", "")).toInt()
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                label = { Text(text = "Dur.") }
-            )
-            FilledTonalButton(modifier = Modifier
-                .weight(0.8f)
-                .height(65.dp), shape = RoundedCornerShape(8.dp), onClick = {
-                scope.launch {
-                    karooSystem.beep(uiThreatLevelFreq, uiThreatLevelDur)
-                }
-            }) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "")
-            }
-        }
+        DrawBeepPanel(karooSystem, scope, uiThreatBeep, pattern,
+            onDurationChange = { newDur ->
+                uiThreatBeep = uiThreatBeep.copy(duration = newDur)
+            },
+            onFreqChange = { newFreq ->
+                uiThreatBeep = uiThreatBeep.copy(frequency = newFreq)
+            })
         Text("All clear sound (0 disable)")
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
-        ) {
-            OutlinedTextField(
-                value = uiThreatPassedLevelFreq.toString(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                onValueChange = { newText ->
-                    if (!newText.isEmpty() && newText.matches(pattern)) {
-                        uiThreatPassedLevelFreq = newText.replace("\n", "").toInt()
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                label = { Text(text = "Freq.") }
-            )
-            OutlinedTextField(
-                value = uiThreatPassedLevelDur.toString(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                onValueChange = { newText ->
-                    if (!newText.isEmpty() && newText.matches(pattern)) {
-                        uiThreatPassedLevelDur = (newText.replace("\n", "")).toInt()
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                label = { Text(text = "Dur.") }
-            )
-            FilledTonalButton(modifier = Modifier
-                .weight(0.8f)
-                .height(65.dp), shape = RoundedCornerShape(8.dp), onClick = {
-                scope.launch {
-                    karooSystem.beep(uiThreatPassedLevelFreq, uiThreatPassedLevelDur)
-                }
-            }) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "")
-            }
-        }
+        DrawBeepPanel(karooSystem, scope, uiPassedBeep, pattern,
+            onDurationChange = { newDur ->
+                uiPassedBeep = uiPassedBeep.copy(duration = newDur)
+            },
+            onFreqChange = { newFreq ->
+                uiPassedBeep = uiPassedBeep.copy(frequency = newFreq)
+            })
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(
                 modifier = Modifier.weight(1f),
@@ -235,9 +165,59 @@ fun MainScreen() {
             )
         }
     }
-
 }
 
+@Composable
+fun DrawBeepPanel(
+    karooSystem: KarooSystemService,
+    scope: CoroutineScope,
+    beep: Beep,
+    pattern: Regex,
+    onFreqChange: (Int) -> Unit,
+    onDurationChange: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        OutlinedTextField(
+            value = beep.frequency.toString(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            onValueChange = { newFreq ->
+                if (!newFreq.isEmpty() && newFreq.matches(pattern)) {
+                    onFreqChange(newFreq.replace("\n", "").toInt())
+                }
+            },
+            modifier = Modifier.weight(1f),
+            singleLine = true,
+            label = { Text(text = "Freq.") }
+        )
+        OutlinedTextField(
+            value = beep.duration.toString(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            onValueChange = { newDuration ->
+                if (!newDuration.isEmpty() && newDuration.matches(pattern)) {
+                    onDurationChange((newDuration.replace("\n", "")).toInt())
+                }
+            },
+            modifier = Modifier.weight(1f),
+            singleLine = true,
+            label = { Text(text = "Dur.") }
+        )
+        FilledTonalButton(modifier = Modifier
+            .weight(0.8f)
+            .height(65.dp), shape = RoundedCornerShape(8.dp), onClick = {
+            scope.launch {
+                karooSystem.beep(beep.frequency, beep.duration)
+            }
+        }) {
+            Icon(Icons.Default.PlayArrow, contentDescription = "")
+        }
+    }
+}
 
 
 
