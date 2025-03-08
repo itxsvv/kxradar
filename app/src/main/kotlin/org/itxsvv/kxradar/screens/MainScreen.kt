@@ -62,6 +62,7 @@ fun MainScreen() {
     var uiPassedBeep by remember { mutableStateOf(Beep(0, 0)) }
     var uiInRideOnlyEnabled by remember { mutableStateOf(true) }
     var uiBeepEnabled by remember { mutableStateOf(true) }
+    var uiWakeScreen by remember { mutableStateOf(true) }
 
     fun saveUISettings() {
         scope.launch {
@@ -69,7 +70,8 @@ fun MainScreen() {
                 threatBeep = uiThreatBeep,
                 passedBeep = uiPassedBeep,
                 inRideOnly = uiInRideOnlyEnabled,
-                enabled = uiBeepEnabled
+                enabled = uiBeepEnabled,
+                wakeScreen = uiWakeScreen
             )
             saveSettings(ctx, radarSettings)
         }
@@ -81,6 +83,7 @@ fun MainScreen() {
             uiPassedBeep = settings.passedBeep
             uiInRideOnlyEnabled = settings.inRideOnly
             uiBeepEnabled = settings.enabled
+            uiWakeScreen = settings.wakeScreen
         }
     }
 
@@ -125,6 +128,17 @@ fun MainScreen() {
             )
             Spacer(modifier = Modifier.width(10.dp))
             Text(modifier = Modifier.weight(1f), text = "In-ride only")
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(
+                modifier = Modifier.weight(1f),
+                checked = uiWakeScreen,
+                onCheckedChange = {
+                    uiWakeScreen = it
+                }
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(modifier = Modifier.weight(1f), text = "Wake Screen")
         }
         FilledTonalButton(modifier = Modifier
             .fillMaxWidth()

@@ -35,6 +35,7 @@ data class RadarSettings(
     val passedBeep: Beep,
     val inRideOnly: Boolean = false,
     val enabled: Boolean = true,
+    val wakeScreen: Boolean = true,
 ) {
     companion object {
         val defaultSettings = Json.encodeToString(RadarSettings())
@@ -43,7 +44,9 @@ data class RadarSettings(
     constructor() : this(
         Beep(200, 100),
         Beep(0, 100),
-        false, true
+        false,
+        true,
+        true
     )
 }
 

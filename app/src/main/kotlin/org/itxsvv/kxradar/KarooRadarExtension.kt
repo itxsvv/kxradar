@@ -6,6 +6,7 @@ import io.hammerhead.karooext.extension.KarooExtension
 import io.hammerhead.karooext.models.DataType
 import io.hammerhead.karooext.models.RideState
 import io.hammerhead.karooext.models.StreamState
+import io.hammerhead.karooext.models.TurnScreenOn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -48,8 +49,11 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.3") {
                         ((settings.inRideOnly && rideState is RideState.Recording) || !settings.inRideOnly)
                     ) {
                         if (!radarThreat && threatLevel > 0) {
-                            Log.i(TAG, "Threat detected")
+                            Log.i(TAG, "Threat detected: " + threatLevel.toString())
                             passedDelay = 0
+                            if (settings.wakeScreen) {
+                                karooSystem.dispatch(TurnScreenOn)
+                            }
                             karooSystem.beep(settings.threatBeep.frequency, settings.threatBeep.duration)
                         }
                         if(passedDelay > 0 && System.currentTimeMillis() - passedDelay > DELAY_BEEP_ALL_CLEAR) {
