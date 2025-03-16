@@ -4,8 +4,8 @@ import io.hammerhead.karooext.models.DataType
 
 /**
  * Main idea:
- * If secondary threats are approaching and the delay between it and the previous threat
- * is more than 2 seconds - make a new beep.
+ * If previously not detected  threat are approaching and the delay between it and
+ * the previous threat is more than 2 seconds - make a new beep.
  */
 class ThreatsMonitor {
     private var targets = mapOf(

@@ -35,6 +35,8 @@ data class RadarSettings(
     val passedBeep: Beep,
     val inRideOnly: Boolean = false,
     val enabled: Boolean = true,
+    val wakeUpScreen: Boolean = true,
+    val redThreadAlert: Boolean = false
 ) {
     companion object {
         val defaultSettings = Json.encodeToString(RadarSettings())
@@ -43,7 +45,7 @@ data class RadarSettings(
     constructor() : this(
         Beep(200, 100),
         Beep(0, 100),
-        false, true
+        false, true, true, false
     )
 }
 
@@ -89,9 +91,18 @@ fun KarooSystemService.streamRideState(): Flow<RideState> {
 }
 
 fun KarooSystemService.beep(freq: Int, duration: Int) {
-    dispatch(
-        PlayBeepPattern(
-            listOf(PlayBeepPattern.Tone(freq, duration))
-        )
-    )
+    beep(freq, duration, 1)
 }
+
+fun KarooSystemService.beep(freq: Int, duration: Int, count: Int) {
+    val beepList = mutableListOf(PlayBeepPattern.Tone(freq, duration))
+    repeat(count - 1) {
+        beepList.add(PlayBeepPattern.Tone(0, 50))
+        beepList.add(PlayBeepPattern.Tone(freq, duration))
+    }
+    dispatch(PlayBeepPattern(beepList))
+}
+
+
+
+

@@ -6,6 +6,7 @@ import io.hammerhead.karooext.extension.KarooExtension
 import io.hammerhead.karooext.models.DataType
 import io.hammerhead.karooext.models.RideState
 import io.hammerhead.karooext.models.StreamState
+import io.hammerhead.karooext.models.TurnScreenOn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -13,7 +14,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 
-class KarooRadarExtension : KarooExtension("kxradar", "1.0.3") {
+class KarooRadarExtension : KarooExtension("kxradar", "1.0.4") {
     companion object {
         const val TAG = "kxradar"
     }
@@ -50,7 +51,11 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.3") {
                         if (!radarThreat && threatLevel > 0) {
                             Log.i(TAG, "Threat detected")
                             passedDelay = 0
-                            karooSystem.beep(settings.threatBeep.frequency, settings.threatBeep.duration)
+                            if (settings.wakeUpScreen) {
+                                karooSystem.dispatch(TurnScreenOn)
+                            }
+                            var beepCount = if (threatLevel > 1.0) 2 else 1
+                            karooSystem.beep(settings.threatBeep.frequency, settings.threatBeep.duration, beepCount)
                         }
                         if(passedDelay > 0 && System.currentTimeMillis() - passedDelay > DELAY_BEEP_ALL_CLEAR) {
                             Log.i(TAG, "All-clear")

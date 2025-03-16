@@ -3,9 +3,9 @@
   "packageName": "org.itxsvv.kxradar",
   "iconUrl": "https://github.com/itxsvv/kxradar/releases/latest/download/karoo-kxradar.png",
   "latestApkUrl": "https://github.com/itxsvv/kxradar/releases/latest/download/app-release.apk",
-  "latestVersionCode": 3,
-  "latestVersion": "1.0.3",
+  "latestVersionCode": 4,
+  "latestVersion": "1.0.4",
   "developer": "itxsvv",
-  "description": "Simple karoo extension that make single beep on radar event",
+  "description": "Hammerhead Karoo extension that allows configuring radar alerts.",
   "releaseNotes": "Initial"
 }
