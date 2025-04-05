@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 
-class KarooRadarExtension : KarooExtension("kxradar", "1.0.4") {
+class KarooRadarExtension : KarooExtension("kxradar", "1.0.5") {
     companion object {
         const val TAG = "kxradar"
     }
@@ -26,11 +26,12 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.4") {
 
     override fun onCreate() {
         super.onCreate()
+        Log.i(TAG,"Radar extension initialized")
         karooSystem = KarooSystemService(applicationContext)
         serviceJob = CoroutineScope(Dispatchers.IO).launch {
             karooSystem.connect { connected ->
                 if (connected) {
-                    Log.i(TAG, "Connected")
+                    Log.i(TAG, "karooSystem Connected")
                 }
             }
             val prefs = applicationContext.streamSettings()

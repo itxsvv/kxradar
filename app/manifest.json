@@ -3,9 +3,9 @@
   "packageName": "org.itxsvv.kxradar",
   "iconUrl": "https://github.com/itxsvv/kxradar/releases/latest/download/karoo-kxradar.png",
   "latestApkUrl": "https://github.com/itxsvv/kxradar/releases/latest/download/app-release.apk",
-  "latestVersionCode": 4,
-  "latestVersion": "1.0.4",
+  "latestVersionCode": 5,
+  "latestVersion": "1.0.5",
   "developer": "itxsvv",
   "description": "Hammerhead Karoo extension that allows configuring radar alerts.",
-  "releaseNotes": "Initial"
+  "releaseNotes": "1.0.5 karoo ext library updated"
 }
