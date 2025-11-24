@@ -1,3 +1,4 @@
+![image](logo.png)
 # Radar Sound Extension for Hammerhead Karoo
 
 [![Build](https://github.com/itxsvv/kxradar/actions/workflows/android.yml/badge.svg)](https://github.com/itxsvv/kxradar/actions/workflows/android.yml)
