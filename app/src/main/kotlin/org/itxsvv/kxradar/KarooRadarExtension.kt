@@ -17,8 +17,9 @@ import kotlinx.coroutines.launch
 class KarooRadarExtension : KarooExtension("kxradar", "1.0.5") {
     companion object {
         const val TAG = "kxradar"
+        private const val ALL_CLEAR_DELAY_MS = 2_000L
     }
-    private var DELAY_BEEP_ALL_CLEAR = 2000
+
     private lateinit var karooSystem: KarooSystemService
     private var serviceJob: Job? = null
     private var radarThreat = false
@@ -26,49 +27,11 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.5") {
 
     override fun onCreate() {
         super.onCreate()
-        Log.i(TAG,"Radar extension initialized")
+        Log.i(TAG, "Radar extension initialized")
         karooSystem = KarooSystemService(applicationContext)
         serviceJob = CoroutineScope(Dispatchers.IO).launch {
-            karooSystem.connect { connected ->
-                if (connected) {
-                    Log.i(TAG, "karooSystem Connected")
-                }
-            }
-            val prefs = applicationContext.streamSettings()
-            val rideStateFlow = karooSystem.streamRideState()
-            karooSystem.streamDataFlow(DataType.Type.RADAR)
-                .mapNotNull { (it as? StreamState.Streaming)?.dataPoint?.values }
-                .combine(rideStateFlow) { values, rideState ->
-                    values to rideState
-                }
-                .combine(prefs) { (values, rideState), settings ->
-                    Triple(values, rideState, settings)
-                }
-                .collect({ (values, rideState, settings) ->
-                    val threatLevel = values[DataType.Field.RADAR_THREAT_LEVEL] ?: 0.0
-                    if (settings.enabled &&
-                        ((settings.inRideOnly && rideState is RideState.Recording) || !settings.inRideOnly)
-                    ) {
-                        if (!radarThreat && threatLevel > 0) {
-                            Log.i(TAG, "Threat detected")
-                            passedDelay = 0
-                            if (settings.wakeUpScreen) {
-                                karooSystem.dispatch(TurnScreenOn)
-                            }
-                            var beepCount = if (threatLevel > 1.0) 2 else 1
-                            karooSystem.beep(settings.threatBeep.frequency, settings.threatBeep.duration, beepCount)
-                        }
-                        if(passedDelay > 0 && System.currentTimeMillis() - passedDelay > DELAY_BEEP_ALL_CLEAR) {
-                            Log.i(TAG, "All-clear")
-                            passedDelay = 0;
-                            karooSystem.beep(settings.passedBeep.frequency, settings.passedBeep.duration)
-                        }
-                        if (radarThreat && threatLevel == 0.0) {
-                            passedDelay = System.currentTimeMillis()
-                        }
-                    }
-                    radarThreat = threatLevel != 0.0
-                })
+            connectToKarooSystem()
+            startMonitoring()
         }
     }
 
@@ -77,5 +40,82 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.5") {
         serviceJob = null
         karooSystem.disconnect()
         super.onDestroy()
+    }
+
+    private suspend fun connectToKarooSystem() {
+        karooSystem.connect { connected ->
+            if (connected) {
+                Log.i(TAG, "karooSystem Connected")
+            }
+        }
+    }
+
+    private suspend fun startMonitoring() {
+        val settingsFlow = RadarSettingsService(applicationContext).settings
+        val rideStateFlow = karooSystem.streamRideState()
+
+        karooSystem.streamDataFlow(DataType.Type.RADAR)
+            .mapNotNull { (it as? StreamState.Streaming)?.dataPoint?.values }
+            .combine(rideStateFlow) { values, rideState ->
+                values to rideState
+            }
+            .combine(settingsFlow) { (values, rideState), settings ->
+                Triple(values, rideState, settings)
+            }
+            .collect { (values, rideState, settings) ->
+                handleRadarUpdate(
+                    threatLevel = values[DataType.Field.RADAR_THREAT_LEVEL] ?: 0.0,
+                    rideState = rideState,
+                    settings = settings,
+                )
+            }
+    }
+
+    private fun handleRadarUpdate(
+        threatLevel: Double,
+        rideState: RideState,
+        settings: RadarSettings,
+    ) {
+        if (settings.enabled &&
+            ((settings.inRideOnly && rideState is RideState.Recording) || !settings.inRideOnly)
+        ) {
+            if (!radarThreat && threatLevel > 0) {
+                handleThreatDetected(threatLevel, settings)
+            }
+            handleAllClearIfNeeded(settings)
+            if (radarThreat && threatLevel == 0.0) {
+                passedDelay = System.currentTimeMillis()
+            }
+        }
+        radarThreat = threatLevel != 0.0
+    }
+
+    private fun handleThreatDetected(
+        threatLevel: Double,
+        settings: RadarSettings,
+    ) {
+        Log.i(TAG, "Threat detected")
+        passedDelay = 0
+        if (settings.wakeUpScreen) {
+            karooSystem.dispatch(TurnScreenOn)
+        }
+        val beepCount = if (settings.redThreadAlert && threatLevel > 1.0) 2 else 1
+        karooSystem.beep(
+            settings.threatBeep.frequency,
+            settings.threatBeep.duration,
+            beepCount,
+        )
+    }
+
+    private fun handleAllClearIfNeeded(settings: RadarSettings) {
+        if (passedDelay <= 0 || System.currentTimeMillis() - passedDelay <= ALL_CLEAR_DELAY_MS) {
+            return
+        }
+        Log.i(TAG, "All-clear")
+        passedDelay = 0
+        karooSystem.beep(
+            settings.passedBeep.frequency,
+            settings.passedBeep.duration,
+        )
     }
 }

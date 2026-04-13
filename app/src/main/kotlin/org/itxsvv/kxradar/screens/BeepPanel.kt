@@ -14,8 +14,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.hammerhead.karooext.KarooSystemService
@@ -33,6 +39,21 @@ fun DrawBeepPanel(
     onFreqChange: (Int) -> Unit,
     onDurationChange: (Int) -> Unit,
 ) {
+    var frequencyText by remember { mutableStateOf(beep.frequency.toString()) }
+    var durationText by remember { mutableStateOf(beep.duration.toString()) }
+
+    LaunchedEffect(beep.frequency) {
+        if (frequencyText != beep.frequency.toString()) {
+            frequencyText = beep.frequency.toString()
+        }
+    }
+
+    LaunchedEffect(beep.duration) {
+        if (durationText != beep.duration.toString()) {
+            durationText = beep.duration.toString()
+        }
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -41,36 +62,53 @@ fun DrawBeepPanel(
         horizontalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         OutlinedTextField(
-            value = beep.frequency.toString(),
+            value = frequencyText,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             onValueChange = { newFreq ->
-                if (!newFreq.isEmpty() && newFreq.matches(pattern)) {
-                    onFreqChange(newFreq.toInt())
+                if (newFreq.matches(pattern)) {
+                    frequencyText = newFreq
+                    onFreqChange(newFreq.toIntOrNull() ?: 0)
                 }
             },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused && frequencyText.isEmpty()) {
+                        frequencyText = "0"
+                        onFreqChange(0)
+                    }
+                },
             singleLine = true,
             label = { Text(text = "Freq.") }
         )
         OutlinedTextField(
-            value = beep.duration.toString(),
+            value = durationText,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             onValueChange = { newDuration ->
-                if (!newDuration.isEmpty() && newDuration.matches(pattern)) {
-                    onDurationChange((newDuration.toInt()))
+                if (newDuration.matches(pattern)) {
+                    durationText = newDuration
+                    onDurationChange(newDuration.toIntOrNull() ?: 0)
                 }
             },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused && durationText.isEmpty()) {
+                        durationText = "0"
+                        onDurationChange(0)
+                    }
+                },
             singleLine = true,
             label = { Text(text = "Dur.") }
         )
-        FilledTonalButton(modifier = Modifier
-            .weight(0.8f)
-            .height(65.dp), shape = RoundedCornerShape(8.dp), onClick = {
-            scope.launch {
-                karooSystem.beep(beep.frequency, beep.duration)
-            }
-        }) {
+        FilledTonalButton(
+            modifier = Modifier
+                .weight(0.8f)
+                .height(65.dp), shape = RoundedCornerShape(8.dp), onClick = {
+                scope.launch {
+                    karooSystem.beep(beep.frequency, beep.duration)
+                }
+            }) {
             Icon(Icons.Default.PlayArrow, contentDescription = "")
         }
     }

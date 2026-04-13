@@ -13,18 +13,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -40,15 +36,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.hammerhead.karooext.KarooSystemService
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.itxsvv.kxradar.Beep
 import org.itxsvv.kxradar.KarooRadarExtension.Companion.TAG
 import org.itxsvv.kxradar.RadarSettings
-import org.itxsvv.kxradar.beep
 import org.itxsvv.kxradar.saveSettings
 import org.itxsvv.kxradar.streamSettings
 
@@ -90,7 +83,8 @@ fun MainScreen() {
         Row(
             Modifier
                 .fillMaxWidth()
-                .height(5.dp)) {}
+                .height(5.dp)
+        ) {}
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(
                 modifier = Modifier
@@ -165,9 +159,11 @@ fun MainScreen() {
         Row(
             Modifier
                 .fillMaxWidth()
-                .height(5.dp)) {}
+                .height(5.dp)
+        ) {}
         Text("Threat sound")
-        DrawBeepPanel(karooSystem, scope, uiThreatBeep, pattern,
+        DrawBeepPanel(
+            karooSystem, scope, uiThreatBeep, pattern,
             onDurationChange = { newDur ->
                 uiThreatBeep = uiThreatBeep.copy(duration = newDur)
             },
@@ -175,7 +171,8 @@ fun MainScreen() {
                 uiThreatBeep = uiThreatBeep.copy(frequency = newFreq)
             })
         Text("All clear sound (0 disable)")
-        DrawBeepPanel(karooSystem, scope, uiPassedBeep, pattern,
+        DrawBeepPanel(
+            karooSystem, scope, uiPassedBeep, pattern,
             onDurationChange = { newDur ->
                 uiPassedBeep = uiPassedBeep.copy(duration = newDur)
             },
@@ -183,20 +180,22 @@ fun MainScreen() {
                 uiPassedBeep = uiPassedBeep.copy(frequency = newFreq)
             })
         Spacer(modifier = Modifier.size(10.dp))
-        FilledTonalButton(modifier = Modifier
-            .fillMaxWidth()
-            .height(50.dp), onClick = {
-            scope.launch {
-                saveUISettings()
-                savedDialogVisible = true
-            }
-        }) {
+        FilledTonalButton(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp), onClick = {
+                scope.launch {
+                    saveUISettings()
+                    savedDialogVisible = true
+                }
+            }) {
             Icon(Icons.Default.Done, contentDescription = "")
             Spacer(modifier = Modifier.width(5.dp))
             Text("Save")
         }
         if (savedDialogVisible) {
-            AlertDialog(onDismissRequest = { savedDialogVisible = false },
+            AlertDialog(
+                onDismissRequest = { savedDialogVisible = false },
                 confirmButton = {
                     Button(onClick = {
                         savedDialogVisible = false
@@ -234,7 +233,8 @@ fun MainScreen() {
     ) {
         TabRow(selectedTabIndex = tabIndex) {
             tabs.forEachIndexed { index, title ->
-                Tab(text = { Text(title) },
+                Tab(
+                    text = { Text(title) },
                     selected = tabIndex == index,
                     onClick = { tabIndex = index }
                 )
@@ -244,6 +244,7 @@ fun MainScreen() {
             0 -> {
                 drawSoundScreen()
             }
+
             1 -> {
                 drawSettingsScreen()
             }
