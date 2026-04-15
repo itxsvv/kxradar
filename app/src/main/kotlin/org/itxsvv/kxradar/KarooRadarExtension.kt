@@ -5,30 +5,42 @@ import io.hammerhead.karooext.KarooSystemService
 import io.hammerhead.karooext.extension.KarooExtension
 import io.hammerhead.karooext.models.DataType
 import io.hammerhead.karooext.models.RideState
+import io.hammerhead.karooext.models.SavedDevices
 import io.hammerhead.karooext.models.StreamState
 import io.hammerhead.karooext.models.TurnScreenOn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
+import org.itxsvv.kxradar.light.KarooLightControl
+import org.itxsvv.kxradar.light.LightMode
 
 class KarooRadarExtension : KarooExtension("kxradar", "1.0.5") {
     companion object {
         const val TAG = "kxradar"
         private const val ALL_CLEAR_DELAY_MS = 2_000L
+        private const val BIKE_LIGHT_DATA_TYPE = "TYPE_BIKE_LIGHT_ID"
+        private const val DEVICE_TYPE_BIKE_LIGHT = 35
     }
 
     private lateinit var karooSystem: KarooSystemService
     private var serviceJob: Job? = null
     private var radarThreat = false
     private var passedDelay = 0L
+    internal lateinit var lightControl: KarooLightControl
+    @Volatile private var rearLightId: String? = null
+    private var savedDevicesConsumerId: String? = null
+    private val extensionScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "Radar extension initialized")
         karooSystem = KarooSystemService(applicationContext)
+        lightControl = KarooLightControl(applicationContext)
         serviceJob = CoroutineScope(Dispatchers.IO).launch {
             connectToKarooSystem()
             startMonitoring()
@@ -38,14 +50,18 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.5") {
     override fun onDestroy() {
         serviceJob?.cancel()
         serviceJob = null
+        lightControl.unbind()
         karooSystem.disconnect()
+        extensionScope.cancel()
         super.onDestroy()
     }
 
-    private suspend fun connectToKarooSystem() {
+    private fun connectToKarooSystem() {
         karooSystem.connect { connected ->
             if (connected) {
                 Log.i(TAG, "karooSystem Connected")
+                lightControl.bind()
+                discoverKarooLights()
             }
         }
     }
@@ -100,6 +116,7 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.5") {
             karooSystem.dispatch(TurnScreenOn)
         }
         val beepCount = if (settings.redThreadAlert && threatLevel > 1.0) 2 else 1
+        light(true)
         karooSystem.beep(
             settings.threatBeep.frequency,
             settings.threatBeep.duration,
@@ -113,9 +130,44 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.5") {
         }
         Log.i(TAG, "All-clear")
         passedDelay = 0
+        light(false)
         karooSystem.beep(
             settings.passedBeep.frequency,
             settings.passedBeep.duration,
         )
     }
+
+    fun light(on: Boolean) {
+        if(on) {
+            rearLightId?.let { lightControl.setLightMode(it, LightMode.STEADY_HIGH.karooName) }
+        } else {
+            rearLightId?.let { lightControl.setLightMode(it, LightMode.OFF.karooName) }
+        }
+    }
+
+    internal fun discoverKarooLights() {
+        savedDevicesConsumerId?.let { karooSystem.removeConsumer(it) }
+        extensionScope.launch {
+            Log.d(TAG, "Querying Karoo for saved bike light devices")
+            savedDevicesConsumerId = karooSystem.addConsumer<SavedDevices> { savedDevices ->
+                val lights = savedDevices.devices.filter { device ->
+                    device.supportedDataTypes.contains(BIKE_LIGHT_DATA_TYPE) && device.enabled
+                }
+                Log.d(TAG, "Found ${lights.size} saved bike light(s)")
+                for (device in lights) {
+                    val parts = device.id.split("-")
+                    if (parts.size >= 3) {
+                        val deviceType = parts[1].toIntOrNull()
+                        if (deviceType == DEVICE_TYPE_BIKE_LIGHT) {
+                            if (rearLightId == null) {
+                                rearLightId = device.id
+                                Log.d(TAG,"Rear light: ${device.name} (${device.id})")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 }
