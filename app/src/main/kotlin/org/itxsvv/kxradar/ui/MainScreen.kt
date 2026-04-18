@@ -1,4 +1,4 @@
-package org.itxsvv.kxradar.screens
+package org.itxsvv.kxradar.ui
 
 import android.util.Log
 import androidx.compose.foundation.background
@@ -7,8 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -17,10 +18,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -42,9 +49,11 @@ import kotlinx.coroutines.launch
 import org.itxsvv.kxradar.Beep
 import org.itxsvv.kxradar.KarooRadarExtension.Companion.TAG
 import org.itxsvv.kxradar.RadarSettings
+import org.itxsvv.kxradar.lightcontrol.LightMode
 import org.itxsvv.kxradar.saveSettings
 import org.itxsvv.kxradar.streamSettings
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen() {
     val pattern = remember { Regex("^\\d*\\d*\$") }
@@ -54,7 +63,7 @@ fun MainScreen() {
     val karooSystem = remember { KarooSystemService(ctx) }
     var savedDialogVisible by remember { mutableStateOf(false) }
     var tabIndex by remember { mutableStateOf(0) }
-    val tabs = listOf("Sounds", "Settings")
+    val tabs = listOf("Sounds", "Light", "Settings")
 
     var uiThreatBeep by remember { mutableStateOf(Beep(200, 100)) }
     var uiPassedBeep by remember { mutableStateOf(Beep(0, 0)) }
@@ -62,6 +71,9 @@ fun MainScreen() {
     var uiBeepEnabled by remember { mutableStateOf(true) }
     var uiWakeUpScreen by remember { mutableStateOf(true) }
     var uiRedThreadAlert by remember { mutableStateOf(false) }
+    var uiLightControlEnabled by remember { mutableStateOf(false) }
+    var uiLightControlMode by remember { mutableStateOf(LightMode.STEADY_HIGH) }
+    var lightModeDropdownExpanded by remember { mutableStateOf(false) }
 
     fun saveUISettings() {
         scope.launch {
@@ -71,7 +83,9 @@ fun MainScreen() {
                 inRideOnly = uiInRideOnlyEnabled,
                 enabled = uiBeepEnabled,
                 wakeUpScreen = uiWakeUpScreen,
-                redThreadAlert = uiRedThreadAlert
+                redThreadAlert = uiRedThreadAlert,
+                lightControlEnabled = uiLightControlEnabled,
+                lightControlMode = uiLightControlMode,
             )
             Log.i(TAG, "" + radarSettings)
             saveSettings(ctx, radarSettings)
@@ -155,6 +169,71 @@ fun MainScreen() {
     }
 
     @Composable
+    fun drawLightScreen() {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(5.dp)
+        ) {}
+        Text("Ensure that the light is")
+        Text("turned off in the Karoo settings")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(
+                modifier = Modifier
+                    .weight(0.5f)
+                    .padding(5.dp),
+                checked = uiLightControlEnabled,
+                onCheckedChange = {
+                    uiLightControlEnabled = it
+                    scope.launch {
+                        saveUISettings()
+                    }
+                }
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(modifier = Modifier.weight(1f), text = "Enabled")
+        }
+
+        ExposedDropdownMenuBox(
+            expanded = lightModeDropdownExpanded,
+            onExpandedChange = { lightModeDropdownExpanded = !lightModeDropdownExpanded },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(5.dp),
+        ) {
+            OutlinedTextField(
+                value = uiLightControlMode.displayName,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Alert Mode") },
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = lightModeDropdownExpanded)
+                },
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
+                    .fillMaxWidth(),
+            )
+            ExposedDropdownMenu(
+                expanded = lightModeDropdownExpanded,
+                onDismissRequest = { lightModeDropdownExpanded = false },
+            ) {
+                LightMode.entries.forEach { mode ->
+                    DropdownMenuItem(
+                        text = { Text(mode.displayName) },
+                        onClick = {
+                            uiLightControlMode = mode
+                            lightModeDropdownExpanded = false
+                            scope.launch {
+                                saveUISettings()
+                            }
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
     fun drawSoundScreen() {
         Row(
             Modifier
@@ -214,6 +293,8 @@ fun MainScreen() {
             uiBeepEnabled = settings.enabled
             uiWakeUpScreen = settings.wakeUpScreen
             uiRedThreadAlert = settings.redThreadAlert
+            uiLightControlEnabled = settings.lightControlEnabled
+            uiLightControlMode = settings.lightControlMode
         }
     }
 
@@ -234,7 +315,8 @@ fun MainScreen() {
         TabRow(selectedTabIndex = tabIndex) {
             tabs.forEachIndexed { index, title ->
                 Tab(
-                    text = { Text(title) },
+                    modifier = Modifier.defaultMinSize(minWidth = 1.dp),
+                    text = { Text(title, maxLines = 1, softWrap = false) },
                     selected = tabIndex == index,
                     onClick = { tabIndex = index }
                 )
@@ -246,13 +328,12 @@ fun MainScreen() {
             }
 
             1 -> {
+                drawLightScreen()
+            }
+
+            2 -> {
                 drawSettingsScreen()
             }
         }
     }
 }
-
-
-
-
-

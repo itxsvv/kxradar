@@ -5,7 +5,8 @@
 
 ![image](logo.png)
 
-Hammerhead Karoo extension that allows configuring radar alerts.
+Hammerhead Karoo extension that allows configuring radar alerts  
+and controlling the radar light.
 
 ## Requirements
 
@@ -29,14 +30,23 @@ Karoo 2:
 3. Install the app by running `adb install app-release.apk`.
 
 ## Usage
-
+**Radar**
 Set the frequency and duration of the sound, and tap ‘Save.’\
 ![Screenshot](kxradar_screen1.png)![Screenshot](kxradar_screen2.png)
+
+**Ligt**
+Experimental feature (Special thanks to **derstrassi**)  
+Light control turns the light on when a vehicle is detected  
+and off when the road is clear, saving battery.  
+Only ONE light is supported.  
+Tested with Garmin Varia 516 (this radar has only one mode).  
+![Screenshot](kxradar_screen3.jpg)![Screenshot](kxradar_screen4.jpg)
 
 ## Links
 
 Official SDK
 [karoo-ext source](https://github.com/hammerheadnav/karoo-ext)\
-Specail thanks for examples to **timklge**
-[github](https://github.com/timklge?tab=repositories)
-
+Specail thanks to   
+**timklge** [github](https://github.com/timklge?tab=repositories)  
+**derstrassi** [github](https://github.com/derstrassi)  
+... 
