@@ -1,4 +1,4 @@
-package org.itxsvv.kxradar.light
+package org.itxsvv.kxradar.lightcontrol
 
 import android.util.Log
 import android.content.ComponentName

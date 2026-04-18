@@ -16,10 +16,10 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
-import org.itxsvv.kxradar.light.KarooLightControl
-import org.itxsvv.kxradar.light.LightMode
+import org.itxsvv.kxradar.lightcontrol.KarooLightControl
+import org.itxsvv.kxradar.lightcontrol.LightMode
 
-class KarooRadarExtension : KarooExtension("kxradar", "1.0.5") {
+class KarooRadarExtension : KarooExtension("kxradar", "1.0.6") {
     companion object {
         const val TAG = "kxradar"
         private const val ALL_CLEAR_DELAY_MS = 2_000L
@@ -116,7 +116,7 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.5") {
             karooSystem.dispatch(TurnScreenOn)
         }
         val beepCount = if (settings.redThreadAlert && threatLevel > 1.0) 2 else 1
-        light(true)
+        light(true, settings)
         karooSystem.beep(
             settings.threatBeep.frequency,
             settings.threatBeep.duration,
@@ -130,18 +130,20 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.5") {
         }
         Log.i(TAG, "All-clear")
         passedDelay = 0
-        light(false)
+        light(false, settings)
         karooSystem.beep(
             settings.passedBeep.frequency,
             settings.passedBeep.duration,
         )
     }
 
-    fun light(on: Boolean) {
-        if(on) {
-            rearLightId?.let { lightControl.setLightMode(it, LightMode.STEADY_HIGH.karooName) }
-        } else {
-            rearLightId?.let { lightControl.setLightMode(it, LightMode.OFF.karooName) }
+    fun light(on: Boolean, settings: RadarSettings) {
+        if(settings.lightControlEnabled) {
+            if (on) {
+                rearLightId?.let { lightControl.setLightMode(it, settings.lightControlMode.karooName) }
+            } else {
+                rearLightId?.let { lightControl.setLightMode(it, LightMode.OFF.karooName) }
+            }
         }
     }
 

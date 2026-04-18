@@ -1,5 +1,6 @@
 package org.itxsvv.kxradar
 
+import org.itxsvv.kxradar.lightcontrol.LightMode
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 
@@ -17,6 +18,8 @@ data class RadarSettings(
     val enabled: Boolean = true,
     val wakeUpScreen: Boolean = true,
     val redThreadAlert: Boolean = false,
+    val lightControlEnabled: Boolean = false,
+    val lightControlMode: LightMode = LightMode.STEADY_HIGH,
 ) {
     companion object {
         val defaultSettings = jsonWithUnknownKeys.encodeToString(RadarSettings())

@@ -1,8 +1,11 @@
-package org.itxsvv.kxradar.light
+package org.itxsvv.kxradar.lightcontrol
+
+import kotlinx.serialization.Serializable
 
 /**
  * (C) https://github.com/derstrassi/karoofirefly
  */
+@Serializable
 enum class LightMode(val modeNumber: Int, val displayName: String, val karooName: String) {
     OFF(0, "Off", "OFF"),
     STEADY_HIGH(1, "Steady High", "STEADY4"),
@@ -14,8 +17,8 @@ enum class LightMode(val modeNumber: Int, val displayName: String, val karooName
     ;
 
     companion object {
-        fun fromModeNumber(number: Int): org.itxsvv.kxradar.light.LightMode? {
-            return org.itxsvv.kxradar.light.LightMode.entries.find { it.modeNumber == number }
+        fun fromModeNumber(number: Int): org.itxsvv.kxradar.lightcontrol.LightMode? {
+            return org.itxsvv.kxradar.lightcontrol.LightMode.entries.find { it.modeNumber == number }
         }
 
         val CYCLING_MODES = listOf(OFF, STEADY_HIGH, STEADY_LOW, SLOW_FLASH, FAST_FLASH)
