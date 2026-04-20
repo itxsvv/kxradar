@@ -30,7 +30,7 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.6") {
     private lateinit var karooSystem: KarooSystemService
     private var serviceJob: Job? = null
     private var radarThreat = false
-    private var passedDelay = 0L
+    private var allClearStartedTime = 0L
     internal lateinit var lightControl: KarooLightControl
     @Volatile private var rearLightId: String? = null
     private var savedDevicesConsumerId: String? = null
@@ -92,50 +92,59 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.6") {
         rideState: RideState,
         settings: RadarSettings,
     ) {
-        if (settings.enabled &&
-            ((settings.inRideOnly && rideState is RideState.Recording) || !settings.inRideOnly)
-        ) {
+        if (settings.enabled) {
             if (!radarThreat && threatLevel > 0) {
-                handleThreatDetected(threatLevel, settings)
+                handleThreatDetected(threatLevel, settings, rideState)
             }
-            handleAllClearIfNeeded(settings)
+            handleAllClearIfNeeded(settings, rideState)
             if (radarThreat && threatLevel == 0.0) {
-                passedDelay = System.currentTimeMillis()
+                allClearStartedTime = System.currentTimeMillis()
             }
         }
         radarThreat = threatLevel != 0.0
     }
 
+
     private fun handleThreatDetected(
         threatLevel: Double,
         settings: RadarSettings,
+        rideState: RideState
     ) {
         Log.i(TAG, "Threat detected")
-        passedDelay = 0
+        allClearStartedTime = 0
         if (settings.wakeUpScreen) {
             karooSystem.dispatch(TurnScreenOn)
         }
         val beepCount = if (settings.redThreadAlert && threatLevel > 1.0) 2 else 1
         light(true, settings)
-        karooSystem.beep(
-            settings.threatBeep.frequency,
-            settings.threatBeep.duration,
-            beepCount,
-        )
+        if(isHandleThreatAllowed(settings, rideState)) {
+            karooSystem.beep(
+                settings.threatBeep.frequency,
+                settings.threatBeep.duration,
+                beepCount,
+            )
+        }
     }
 
-    private fun handleAllClearIfNeeded(settings: RadarSettings) {
-        if (passedDelay <= 0 || System.currentTimeMillis() - passedDelay <= ALL_CLEAR_DELAY_MS) {
+    private fun handleAllClearIfNeeded(settings: RadarSettings, rideState: RideState) {
+        if (allClearStartedTime <= 0 || System.currentTimeMillis() - allClearStartedTime <= ALL_CLEAR_DELAY_MS) {
             return
         }
         Log.i(TAG, "All-clear")
-        passedDelay = 0
+        allClearStartedTime = 0
         light(false, settings)
-        karooSystem.beep(
-            settings.passedBeep.frequency,
-            settings.passedBeep.duration,
-        )
+        if(isHandleThreatAllowed(settings, rideState)) {
+            karooSystem.beep(
+                settings.passedBeep.frequency,
+                settings.passedBeep.duration,
+            )
+        }
     }
+
+    private fun isHandleThreatAllowed(
+        settings: RadarSettings,
+        rideState: RideState
+    ): Boolean = ((settings.inRideOnly && rideState is RideState.Recording) || !settings.inRideOnly)
 
     fun light(on: Boolean, settings: RadarSettings) {
         if(settings.lightControlEnabled) {

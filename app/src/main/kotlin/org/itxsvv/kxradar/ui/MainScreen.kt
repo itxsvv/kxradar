@@ -175,8 +175,6 @@ fun MainScreen() {
                 .fillMaxWidth()
                 .height(5.dp)
         ) {}
-        Text("Ensure that the light is")
-        Text("turned off in the Karoo settings")
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(
                 modifier = Modifier
@@ -191,9 +189,8 @@ fun MainScreen() {
                 }
             )
             Spacer(modifier = Modifier.width(10.dp))
-            Text(modifier = Modifier.weight(1f), text = "Enabled")
+            Text(modifier = Modifier.weight(1f), text = "Control light")
         }
-
         ExposedDropdownMenuBox(
             expanded = lightModeDropdownExpanded,
             onExpandedChange = { lightModeDropdownExpanded = !lightModeDropdownExpanded },
@@ -231,6 +228,12 @@ fun MainScreen() {
                 }
             }
         }
+        HorizontalDivider(
+            thickness = 2.dp, modifier = Modifier
+                .padding(vertical = 10.dp)
+        )
+        Text("Ensure that the light is")
+        Text("turned off in the Karoo settings")
     }
 
     @Composable
