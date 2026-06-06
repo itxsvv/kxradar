@@ -8,6 +8,10 @@
 Hammerhead Karoo extension that allows configuring radar alerts  
 and controlling the radar light.
 
+##
+**I strongly recommend using the light control extension instead of the embedded kxradar light control.  
+[KarooFireFly ANT+ & Bluetooth Smart Bike Light Controller for Hammerhead Karoo 3](https://github.com/derstrassi/karoofirefly)**
+
 ## Requirements
 
 <font color="red">**You must disable the default radar sound in the Karoo settings.</font>\
@@ -41,6 +45,9 @@ and off when the road is clear, saving battery.
 Only ONE light is supported.  
 Tested with Garmin Varia 516 (this radar has only one mode).  
 ![Screenshot](kxradar_screen3.jpg)![Screenshot](kxradar_screen4.jpg)
+
+## Known issues
+If you add a new radar, a device restart is required.
 
 ## Links
 
