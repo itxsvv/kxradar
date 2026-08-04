@@ -13,8 +13,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.itxsvv.kxradar.lightcontrol.KarooLightControl
 import org.itxsvv.kxradar.lightcontrol.LightMode
@@ -23,6 +25,7 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.7") {
     companion object {
         const val TAG = "kxradar"
         private const val ALL_CLEAR_DELAY_MS = 2_000L
+        private const val SUN_CHECK_INTERVAL_MS = 10 * 60 * 1000L
         private const val BIKE_LIGHT_DATA_TYPE = "TYPE_BIKE_LIGHT_ID"
         private const val DEVICE_TYPE_BIKE_LIGHT = 35
     }
@@ -30,8 +33,15 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.7") {
     private lateinit var karooSystem: KarooSystemService
     private var serviceJob: Job? = null
     private var radarThreat = false
+    private var radarLightRequested = false
+    private var sunLightRequested = false
+    private var appliedLightState = false
     private var allClearStartedTime = 0L
     private var wasRidePaused = false
+    private var isRidePaused = false
+    private var latestSunriseTime = 0L
+    private var latestSunsetTime = 0L
+    private var latestSettings = RadarSettings()
     internal lateinit var lightControl: KarooLightControl
     @Volatile private var rearLightId: String? = null
     private var savedDevicesConsumerId: String? = null
@@ -42,6 +52,7 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.7") {
         Log.i(TAG, "Radar extension initialized")
         karooSystem = KarooSystemService(applicationContext)
         lightControl = KarooLightControl(applicationContext)
+        startSunAutomation()
         serviceJob = CoroutineScope(Dispatchers.IO).launch {
             connectToKarooSystem()
             startMonitoring()
@@ -52,6 +63,7 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.7") {
         serviceJob?.cancel()
         serviceJob = null
         lightControl.unbind()
+        savedDevicesConsumerId?.let { karooSystem.removeConsumer(it) }
         karooSystem.disconnect()
         extensionScope.cancel()
         super.onDestroy()
@@ -93,10 +105,13 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.7") {
         rideState: RideState,
         settings: RadarSettings,
     ) {
+        latestSettings = settings
+        isRidePaused = rideState is RideState.Paused
+
         if (!settings.enabled) {
             allClearStartedTime = 0L
             radarThreat = threatLevel != 0.0
-            wasRidePaused = rideState is RideState.Paused
+            wasRidePaused = isRidePaused
             return
         }
 
@@ -115,11 +130,12 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.7") {
         }
 
         if (shouldHandleAllClear) {
+            radarLightRequested = false
             allClearStartedTime = 0L
         }
 
         radarThreat = threatLevel != 0.0
-        wasRidePaused = rideState is RideState.Paused
+        wasRidePaused = isRidePaused
     }
 
     private fun handleLightState(
@@ -128,23 +144,29 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.7") {
         settings: RadarSettings,
         shouldHandleAllClear: Boolean,
     ) {
-        val isRidePaused = rideState is RideState.Paused
-
         if (!settings.lightControlEnabled) {
-            if (radarThreat) {
+            if (appliedLightState) {
                 forceLightOff()
+                appliedLightState = false
             }
+            radarLightRequested = false
+            sunLightRequested = false
             return
         }
 
         if (!wasRidePaused && isRidePaused) {
-            forceLightOff()
-            return
+            updateLightState(settings)
+        }
+
+        if (wasRidePaused && !isRidePaused) {
+            evaluateSunLightRequest(settings)
+            updateLightState(settings)
         }
 
         if (!radarThreat && threatLevel > 0 && !isRidePaused) {
-            light(true, settings)
+            radarLightRequested = true
             allClearStartedTime = 0L
+            updateLightState(settings)
         }
 
         if (threatLevel == 0.0 && shouldHandleAllClear) {
@@ -174,7 +196,8 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.7") {
 
     private fun handleLightAllClear(settings: RadarSettings) {
         Log.i(TAG, "All-clear")
-        light(false, settings)
+        radarLightRequested = false
+        updateLightState(settings)
     }
 
     private fun handleSoundAllClearIfNeeded(
@@ -201,6 +224,109 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.7") {
     private fun shouldTriggerAllClear(): Boolean {
         return allClearStartedTime > 0 &&
             System.currentTimeMillis() - allClearStartedTime > ALL_CLEAR_DELAY_MS
+    }
+
+    private fun startSunAutomation() {
+        extensionScope.launch {
+            RadarSettingsService(applicationContext).settings.collect { settings ->
+                latestSettings = settings
+                evaluateSunLightRequest(settings)
+            }
+        }
+        extensionScope.launch {
+            observeSunTime(DataType.Type.SUNRISE, DataType.Field.SUNRISE) { sunrise ->
+                latestSunriseTime = sunrise
+                evaluateSunLightRequest(latestSettings)
+            }
+        }
+        extensionScope.launch {
+            observeSunTime(DataType.Type.SUNSET, DataType.Field.SUNSET) { sunset ->
+                latestSunsetTime = sunset
+                evaluateSunLightRequest(latestSettings)
+            }
+        }
+        extensionScope.launch {
+            while (isActive) {
+                evaluateSunLightRequest(latestSettings)
+                delay(SUN_CHECK_INTERVAL_MS)
+            }
+        }
+    }
+
+    private suspend fun observeSunTime(
+        dataTypeId: String,
+        fieldId: String,
+        onUpdate: (Long) -> Unit,
+    ) {
+        karooSystem.streamDataFlow(dataTypeId)
+            .mapNotNull { (it as? StreamState.Streaming)?.dataPoint?.values?.get(fieldId)?.toLong() }
+            .collect { onUpdate(it) }
+    }
+
+    private fun evaluateSunLightRequest(settings: RadarSettings) {
+        if (!settings.enabled) {
+            return
+        }
+        if (!settings.lightControlEnabled) {
+            sunLightRequested = false
+            radarLightRequested = false
+            if (appliedLightState) {
+                forceLightOff()
+                appliedLightState = false
+            }
+            return
+        }
+        if (!settings.lightAutoBySunEnabled) {
+            if (sunLightRequested) {
+                sunLightRequested = false
+                updateLightState(settings)
+            }
+            return
+        }
+        if (latestSunriseTime <= 0L || latestSunsetTime <= 0L) {
+            return
+        }
+
+        val sunWindowActive = isSunWindowActive(
+            now = System.currentTimeMillis(),
+            sunriseTime = latestSunriseTime,
+            sunsetTime = latestSunsetTime,
+            sunriseOffsetMinutes = settings.lightSunriseOffsetMinutes,
+            sunsetOffsetMinutes = settings.lightSunsetOffsetMinutes,
+        )
+
+        if (sunLightRequested != sunWindowActive) {
+            sunLightRequested = sunWindowActive
+            updateLightState(settings)
+        }
+    }
+
+    private fun isSunWindowActive(
+        now: Long,
+        sunriseTime: Long,
+        sunsetTime: Long,
+        sunriseOffsetMinutes: Int,
+        sunsetOffsetMinutes: Int,
+    ): Boolean {
+        val sunriseBoundary = sunriseTime + sunriseOffsetMinutes * 60_000L
+        val sunsetBoundary = sunsetTime + sunsetOffsetMinutes * 60_000L
+        return now >= sunsetBoundary || now < sunriseBoundary
+    }
+
+    private fun updateLightState(settings: RadarSettings) {
+        if (!settings.enabled || !settings.lightControlEnabled) {
+            return
+        }
+        val shouldBeOn = !isRidePaused && (radarLightRequested || sunLightRequested)
+        if (shouldBeOn == appliedLightState) {
+            return
+        }
+        if (shouldBeOn) {
+            light(true, settings)
+        } else {
+            forceLightOff()
+        }
+        appliedLightState = shouldBeOn
     }
 
     fun light(on: Boolean, settings: RadarSettings) {

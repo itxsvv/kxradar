@@ -28,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -43,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.hammerhead.karooext.KarooSystemService
 import kotlinx.coroutines.launch
@@ -73,6 +75,9 @@ fun MainScreen() {
     var uiRedThreadAlert by remember { mutableStateOf(false) }
     var uiLightControlEnabled by remember { mutableStateOf(false) }
     var uiLightControlMode by remember { mutableStateOf(LightMode.STEADY_HIGH) }
+    var uiLightAutoBySunEnabled by remember { mutableStateOf(false) }
+    var uiLightSunsetOffsetMinutes by remember { mutableStateOf(0) }
+    var uiLightSunriseOffsetMinutes by remember { mutableStateOf(0) }
     var lightModeDropdownExpanded by remember { mutableStateOf(false) }
 
     fun saveUISettings() {
@@ -86,6 +91,9 @@ fun MainScreen() {
                 redThreadAlert = uiRedThreadAlert,
                 lightControlEnabled = uiLightControlEnabled,
                 lightControlMode = uiLightControlMode,
+                lightAutoBySunEnabled = uiLightAutoBySunEnabled,
+                lightSunsetOffsetMinutes = uiLightSunsetOffsetMinutes,
+                lightSunriseOffsetMinutes = uiLightSunriseOffsetMinutes,
             )
             Log.i(TAG, "" + radarSettings)
             saveSettings(ctx, radarSettings)
@@ -179,7 +187,7 @@ fun MainScreen() {
             Switch(
                 modifier = Modifier
                     .weight(0.5f)
-                    .padding(5.dp),
+                    .padding(0.dp),
                 checked = uiLightControlEnabled,
                 onCheckedChange = {
                     uiLightControlEnabled = it
@@ -191,12 +199,28 @@ fun MainScreen() {
             Spacer(modifier = Modifier.width(10.dp))
             Text(modifier = Modifier.weight(1f), text = "Control light")
         }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(
+                modifier = Modifier
+                    .weight(0.5f)
+                    .padding(0.dp),
+                checked = uiLightAutoBySunEnabled,
+                onCheckedChange = {
+                    uiLightAutoBySunEnabled = it
+                    scope.launch {
+                        saveUISettings()
+                    }
+                }
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(modifier = Modifier.weight(1f), text = "Auto by sun")
+        }
         ExposedDropdownMenuBox(
             expanded = lightModeDropdownExpanded,
             onExpandedChange = { lightModeDropdownExpanded = !lightModeDropdownExpanded },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(5.dp),
+                .padding(2.dp),
         ) {
             OutlinedTextField(
                 value = uiLightControlMode.displayName,
@@ -228,12 +252,40 @@ fun MainScreen() {
                 }
             }
         }
-        HorizontalDivider(
-            thickness = 2.dp, modifier = Modifier
-                .padding(vertical = 10.dp)
+        Text(
+            modifier = Modifier.fillMaxWidth(),
+            text = "Sunset offset: ${formatOffsetMinutes(uiLightSunsetOffsetMinutes)}",
+            textAlign = TextAlign.Center,
         )
-        Text("Ensure that the light is")
-        Text("turned off in the Karoo settings")
+        Slider(
+            modifier = Modifier.padding(horizontal = 10.dp),
+            value = uiLightSunsetOffsetMinutes.toFloat(),
+            onValueChange = { newValue ->
+                uiLightSunsetOffsetMinutes = roundOffsetMinutes(newValue)
+                scope.launch {
+                    saveUISettings()
+                }
+            },
+            valueRange = -30f..30f,
+            steps = 11,
+        )
+        Text(
+            modifier = Modifier.fillMaxWidth(),
+            text = "Sunrise offset: ${formatOffsetMinutes(uiLightSunriseOffsetMinutes)}",
+            textAlign = TextAlign.Center,
+        )
+        Slider(
+            modifier = Modifier.padding(horizontal = 10.dp),
+            value = uiLightSunriseOffsetMinutes.toFloat(),
+            onValueChange = { newValue ->
+                uiLightSunriseOffsetMinutes = roundOffsetMinutes(newValue)
+                scope.launch {
+                    saveUISettings()
+                }
+            },
+            valueRange = -30f..30f,
+            steps = 11,
+        )
     }
 
     @Composable
@@ -298,6 +350,9 @@ fun MainScreen() {
             uiRedThreadAlert = settings.redThreadAlert
             uiLightControlEnabled = settings.lightControlEnabled
             uiLightControlMode = settings.lightControlMode
+            uiLightAutoBySunEnabled = settings.lightAutoBySunEnabled
+            uiLightSunsetOffsetMinutes = settings.lightSunsetOffsetMinutes
+            uiLightSunriseOffsetMinutes = settings.lightSunriseOffsetMinutes
         }
     }
 
@@ -309,10 +364,10 @@ fun MainScreen() {
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxSize()
-            .padding(2.dp)
+            .padding(1.dp)
             .background(MaterialTheme.colorScheme.background)
             .clickable { focusManager.clearFocus() },
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         TabRow(selectedTabIndex = tabIndex) {
@@ -338,5 +393,17 @@ fun MainScreen() {
                 drawSettingsScreen()
             }
         }
+    }
+}
+
+private fun roundOffsetMinutes(value: Float): Int {
+    return (value.toInt() / 5) * 5
+}
+
+private fun formatOffsetMinutes(value: Int): String {
+    return when {
+        value > 0 -> "+$value min"
+        value < 0 -> "$value min"
+        else -> "0 min"
     }
 }

@@ -20,6 +20,9 @@ data class RadarSettings(
     val redThreadAlert: Boolean = false,
     val lightControlEnabled: Boolean = false,
     val lightControlMode: LightMode = LightMode.STEADY_HIGH,
+    val lightAutoBySunEnabled: Boolean = false,
+    val lightSunsetOffsetMinutes: Int = 0,
+    val lightSunriseOffsetMinutes: Int = 0,
 ) {
     companion object {
         val defaultSettings = jsonWithUnknownKeys.encodeToString(RadarSettings())
