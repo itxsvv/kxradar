@@ -4,6 +4,7 @@ import android.util.Log
 import io.hammerhead.karooext.KarooSystemService
 import io.hammerhead.karooext.extension.KarooExtension
 import io.hammerhead.karooext.models.DataType
+import io.hammerhead.karooext.models.OnLocationChanged
 import io.hammerhead.karooext.models.SavedDevices
 import io.hammerhead.karooext.models.StreamState
 import io.hammerhead.karooext.models.TurnScreenOn
@@ -13,13 +14,17 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.itxsvv.kxradar.lightcontrol.KarooLightControl
 import org.itxsvv.kxradar.lightcontrol.LightMode
+import java.io.IOException
+import java.time.Instant
 
 class KarooRadarExtension : KarooExtension("kxradar", "1.0.8") {
     companion object {
@@ -36,8 +41,11 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.8") {
     internal lateinit var lightControl: KarooLightControl
     @Volatile private var rearLightId: String? = null
     private var savedDevicesConsumerId: String? = null
+    private var locationConsumerId: String? = null
+    @Volatile private var locationStreamJob: Job? = null
     private val extensionScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val sunTimeNormalizer = SunTimeNormalizer()
+    private val sunAutomationCoordinator = SunAutomationCoordinator()
+    private lateinit var sunLocationRepository: SunLocationRepository
     private val alertController = RadarAlertController(object : RadarAlertEffects {
         override fun wakeScreen() {
             karooSystem.dispatch(TurnScreenOn)
@@ -52,8 +60,19 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.8") {
         }
 
         override fun setLightMode(mode: LightMode): Boolean {
-            val lightId = rearLightId ?: return false
-            return lightControl.setLightMode(lightId, mode.karooName)
+            val lightId = rearLightId
+            if (lightId == null) {
+                Log.w(TAG, "Light command skipped: requested=$mode, rear light is unavailable")
+                return false
+            }
+            val success = lightControl.setLightMode(lightId, mode.karooName)
+            val message = "Light command: requested=$mode, lightId=$lightId, success=$success"
+            if (success) {
+                Log.i(TAG, message)
+            } else {
+                Log.w(TAG, message)
+            }
+            return success
         }
 
         override fun logThreatDetected() {
@@ -63,12 +82,17 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.8") {
         override fun logAllClear() {
             Log.i(TAG, "All-clear")
         }
+
+        override fun logLightControl(message: String) {
+            Log.i(TAG, message)
+        }
     })
 
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "Radar extension initialized")
         karooSystem = KarooSystemService(applicationContext)
+        sunLocationRepository = SunLocationRepository(applicationContext)
         lightControl = KarooLightControl(applicationContext) { connected ->
             if (connected) {
                 alertController.onLightAvailable(latestSettings)
@@ -88,6 +112,9 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.8") {
         serviceJob = null
         lightControl.unbind()
         savedDevicesConsumerId?.let { karooSystem.removeConsumer(it) }
+        locationConsumerId?.let { karooSystem.removeConsumer(it) }
+        locationStreamJob?.cancel()
+        locationStreamJob = null
         karooSystem.disconnect()
         extensionScope.cancel()
         super.onDestroy()
@@ -126,48 +153,142 @@ class KarooRadarExtension : KarooExtension("kxradar", "1.0.8") {
     }
 
     private fun startSunAutomation() {
+        observeSunSettings()
+        restoreSunLocation()
+        observeKarooLocationEvents()
+        observeKarooLocationDataType()
+        startSunTimer()
+    }
+
+    private fun observeSunSettings() {
         extensionScope.launch {
             RadarSettingsService(applicationContext).settings.collect { settings ->
                 latestSettings = settings
                 alertController.onSunTimerTick(settings)
             }
         }
+    }
+
+    private fun restoreSunLocation() {
         extensionScope.launch {
-            observeSunTime(DataType.Type.SUNRISE, DataType.Field.SUNRISE) { sunrise ->
-                alertController.onSunriseUpdated(sunrise, latestSettings)
+            val cachedLocation = sunLocationRepository.location.first()
+            if (cachedLocation == null) {
+                Log.i(TAG, "No cached sun location; waiting for Karoo location")
+            } else {
+                Log.i(TAG, "Restoring cached sun location")
+                stopLocationDataTypeFallback("cached location restore")
+                applySunAutomationUpdate(
+                    sunAutomationCoordinator.restoreLocation(cachedLocation),
+                    source = "cache",
+                )
             }
         }
-        extensionScope.launch {
-            observeSunTime(DataType.Type.SUNSET, DataType.Field.SUNSET) { sunset ->
-                alertController.onSunsetUpdated(sunset, latestSettings)
+    }
+
+    private fun observeKarooLocationEvents() {
+        locationConsumerId = karooSystem.addConsumer<OnLocationChanged> { event ->
+            extensionScope.launch {
+                handleSunLocation(
+                    location = SunLocation(event.lat, event.lng),
+                    source = "location event",
+                )
             }
         }
+    }
+
+    private fun observeKarooLocationDataType() {
+        locationStreamJob = extensionScope.launch {
+            Log.i(TAG, "Subscribing to Karoo location data type")
+            val location = karooSystem.streamDataFlow(DataType.Type.LOCATION)
+                .catch { error -> Log.e(TAG, "Karoo location stream failed", error) }
+                .mapNotNull(::locationFromStreamState)
+                .firstOrNull()
+            locationStreamJob = null
+            if (location == null) {
+                Log.w(TAG, "Karoo location data type ended without a valid location")
+                return@launch
+            }
+            Log.i(TAG, "Karoo location data type fallback received a valid location")
+            handleSunLocation(location, source = "location data type")
+        }
+    }
+
+    private fun locationFromStreamState(state: StreamState): SunLocation? {
+        if (state !is StreamState.Streaming) {
+            Log.i(TAG, "Karoo location stream state=$state")
+            return null
+        }
+        val values = state.dataPoint.values
+        val latitude = values[DataType.Field.LOC_LATITUDE]
+        val longitude = values[DataType.Field.LOC_LONGITUDE]
+        if (latitude == null || longitude == null) {
+            Log.w(TAG, "Karoo location data missing coordinates: fields=${values.keys}")
+            return null
+        }
+        val location = SunLocation(latitude, longitude)
+        if (!location.isValid()) {
+            Log.w(TAG, "Ignoring invalid Karoo location from location data type")
+            return null
+        }
+        return location
+    }
+
+    private suspend fun handleSunLocation(location: SunLocation, source: String) {
+        if (!location.isValid()) {
+            Log.w(TAG, "Ignoring invalid Karoo location from $source")
+            return
+        }
+        stopLocationDataTypeFallback(source)
+        applySunAutomationUpdate(
+            sunAutomationCoordinator.onLocationUpdate(location),
+            source = source,
+        )
+    }
+
+    private fun stopLocationDataTypeFallback(source: String) {
+        val streamJob = locationStreamJob ?: return
+        locationStreamJob = null
+        streamJob.cancel()
+        Log.i(TAG, "Stopped Karoo location data type fallback after $source")
+    }
+
+    private fun startSunTimer() {
         extensionScope.launch {
             while (isActive) {
+                applySunAutomationUpdate(
+                    sunAutomationCoordinator.refresh(),
+                    source = "date refresh",
+                )
                 alertController.onSunTimerTick(latestSettings)
                 delay(SUN_CHECK_INTERVAL_MS)
             }
         }
     }
 
-    private suspend fun observeSunTime(
-        dataTypeId: String,
-        fieldId: String,
-        onUpdate: (Long) -> Unit,
+    private suspend fun applySunAutomationUpdate(
+        update: SunAutomationUpdate,
+        source: String,
     ) {
-        karooSystem.streamDataFlow(dataTypeId)
-            .mapNotNull { (it as? StreamState.Streaming)?.dataPoint?.values?.get(fieldId) }
-            .distinctUntilChanged()
-            .mapNotNull { value ->
-                val normalized = sunTimeNormalizer.toEpochMillis(value, System.currentTimeMillis())
-                if (normalized == null) {
-                    Log.w(TAG, "$fieldId has unsupported time value: $value")
-                } else {
-                    Log.d(TAG, "$fieldId raw=$value normalized=$normalized")
-                }
-                normalized
+        update.sunTimes?.let { sunTimes ->
+            Log.i(
+                TAG,
+                "Sun times calculated from $source: " +
+                    "sunrise=${Instant.ofEpochMilli(sunTimes.sunriseTime)}, " +
+                    "sunset=${Instant.ofEpochMilli(sunTimes.sunsetTime)}",
+            )
+            alertController.onSunTimesUpdated(sunTimes, latestSettings)
+        }
+        if (update.calculationAttempted && update.sunTimes == null) {
+            Log.w(TAG, "Sun time calculation failed for $source")
+        }
+        update.locationToPersist?.let { location ->
+            try {
+                sunLocationRepository.save(location)
+                Log.i(TAG, "Saved sun location from $source")
+            } catch (error: IOException) {
+                Log.e(TAG, "Failed to save sun location from $source", error)
             }
-            .collect { onUpdate(it) }
+        }
     }
 
     internal fun discoverKarooLights() {

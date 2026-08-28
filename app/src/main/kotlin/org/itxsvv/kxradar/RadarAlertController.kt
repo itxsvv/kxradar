@@ -10,12 +10,19 @@ internal interface RadarAlertEffects {
     fun setLightMode(mode: LightMode): Boolean
     fun logThreatDetected()
     fun logAllClear()
+    fun logLightControl(message: String)
+}
+
+internal enum class SunLightState {
+    UNKNOWN,
+    DAY,
+    NIGHT,
 }
 
 internal data class RadarAlertState(
     val radarThreat: Boolean = false,
     val radarLightRequested: Boolean = false,
-    val sunLightRequested: Boolean = false,
+    val sunLightState: SunLightState = SunLightState.UNKNOWN,
     val appliedLightMode: LightMode? = null,
     val lightControlActive: Boolean = false,
     val allClearStartedTime: Long = 0L,
@@ -62,14 +69,11 @@ internal class RadarAlertController(
     }
 
     @Synchronized
-    fun onSunriseUpdated(sunrise: Long, settings: RadarSettings) {
-        state = state.copy(latestSunriseTime = sunrise)
-        evaluateSunLightRequest(settings)
-    }
-
-    @Synchronized
-    fun onSunsetUpdated(sunset: Long, settings: RadarSettings) {
-        state = state.copy(latestSunsetTime = sunset)
+    fun onSunTimesUpdated(sunTimes: SunTimes, settings: RadarSettings) {
+        state = state.copy(
+            latestSunriseTime = sunTimes.sunriseTime,
+            latestSunsetTime = sunTimes.sunsetTime,
+        )
         evaluateSunLightRequest(settings)
     }
 
@@ -80,6 +84,7 @@ internal class RadarAlertController(
 
     @Synchronized
     fun onLightAvailable(settings: RadarSettings) {
+        effects.logLightControl("Rear light available; recalculating requested mode")
         state = state.copy(appliedLightMode = null)
         evaluateSunLightRequest(settings)
         updateLightState(settings)
@@ -87,6 +92,7 @@ internal class RadarAlertController(
 
     @Synchronized
     fun onLightUnavailable() {
+        effects.logLightControl("Rear light unavailable")
         state = state.copy(appliedLightMode = null)
     }
 
@@ -135,7 +141,12 @@ internal class RadarAlertController(
     private fun handleLightAllClear(settings: RadarSettings) {
         effects.logAllClear()
         state = state.copy(radarLightRequested = false)
-        updateLightState(settings)
+        effects.logLightControl("All-clear: recalculating sun state")
+        evaluateSunLightRequest(settings)
+        effects.logLightControl(
+            "All-clear light result: autoBySun=${settings.lightAutoBySunEnabled}, " +
+                "sunState=${state.sunLightState}",
+        )
     }
 
     private fun handleSoundAllClearIfNeeded(
@@ -163,22 +174,37 @@ internal class RadarAlertController(
             return
         }
         if (!settings.lightAutoBySunEnabled) {
-            state = state.copy(sunLightRequested = false)
+            state = state.copy(sunLightState = SunLightState.UNKNOWN)
             updateLightState(settings)
             return
         }
         if (state.latestSunriseTime <= 0L || state.latestSunsetTime <= 0L) {
+            state = state.copy(sunLightState = SunLightState.UNKNOWN)
+            effects.logLightControl(
+                "Sun state UNKNOWN: sunrise=${state.latestSunriseTime}, " +
+                    "sunset=${state.latestSunsetTime}; preserving current light mode",
+            )
             return
         }
+        val now = clock()
         val sunWindowActive = sunLightPolicy.isSunWindowActive(
-            now = clock(),
+            now = now,
             sunriseTime = state.latestSunriseTime,
             sunsetTime = state.latestSunsetTime,
             sunriseOffsetMinutes = settings.lightSunriseOffsetMinutes,
             sunsetOffsetMinutes = settings.lightSunsetOffsetMinutes,
         )
+        val newSunLightState = if (sunWindowActive) SunLightState.NIGHT else SunLightState.DAY
+        if (newSunLightState != state.sunLightState) {
+            effects.logLightControl(
+                "Sun state ${state.sunLightState} -> $newSunLightState: now=$now, " +
+                    "sunrise=${state.latestSunriseTime}, sunset=${state.latestSunsetTime}, " +
+                    "sunriseOffset=${settings.lightSunriseOffsetMinutes}min, " +
+                    "sunsetOffset=${settings.lightSunsetOffsetMinutes}min",
+            )
+        }
         state = state.copy(
-            sunLightRequested = sunWindowActive,
+            sunLightState = newSunLightState,
             lightControlActive = true,
         )
         updateLightState(settings)
@@ -188,7 +214,17 @@ internal class RadarAlertController(
         if (!settings.enabled || !settings.lightControlEnabled || !state.lightControlActive) {
             return
         }
-        val requestedMode = if (state.radarLightRequested || state.sunLightRequested) {
+        if (
+            settings.lightAutoBySunEnabled &&
+            state.sunLightState == SunLightState.UNKNOWN &&
+            !state.radarLightRequested
+        ) {
+            effects.logLightControl("Light command skipped: sun state is UNKNOWN")
+            return
+        }
+        val requestedMode = if (
+            state.radarLightRequested || state.sunLightState == SunLightState.NIGHT
+        ) {
             settings.lightControlMode
         } else {
             LightMode.OFF
@@ -210,7 +246,7 @@ internal class RadarAlertController(
         if (!shouldTurnOff) {
             state = state.copy(
                 radarLightRequested = false,
-                sunLightRequested = false,
+                sunLightState = SunLightState.UNKNOWN,
                 lightControlActive = false,
             )
             return
@@ -218,7 +254,7 @@ internal class RadarAlertController(
         val lightTurnedOff = state.appliedLightMode == LightMode.OFF || effects.setLightMode(LightMode.OFF)
         state = state.copy(
             radarLightRequested = false,
-            sunLightRequested = false,
+            sunLightState = SunLightState.UNKNOWN,
             appliedLightMode = if (lightTurnedOff) LightMode.OFF else state.appliedLightMode,
             lightControlActive = !lightTurnedOff,
         )

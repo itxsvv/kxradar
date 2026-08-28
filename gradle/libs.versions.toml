@@ -14,6 +14,7 @@ kotlinxSerializationJson = "1.7.3"
 navigationRuntimeKtx = "2.8.4"
 navigationCompose = "2.8.4"
 junit = "4.13.2"
+sunriseSunset = "1.1.1"
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -44,6 +45,7 @@ androidx-navigation-runtime-ktx = { group = "androidx.navigation", name = "navig
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 junit = { module = "junit:junit", version.ref = "junit" }
+sunrise-sunset = { module = "ca.rmen:lib-sunrise-sunset", version.ref = "sunriseSunset" }
 
 [bundles]
 androidx-lifeycle = ["androidx-lifecycle-runtime-compose", "androidx-lifecycle-viewmodel-compose"]

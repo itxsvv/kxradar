@@ -103,28 +103,46 @@ class RadarAlertControllerTest {
     }
 
     @Test
-    fun `all clear keeps light on after sunset`() {
-        now = time("2026-08-28T20:00:00Z")
+    fun `all clear recalculates sun state and keeps light on after sunset`() {
         updateSunTimes("2026-08-28T06:00:00Z", "2026-08-28T18:00:00Z")
         effects.lightModes.clear()
+        now = time("2026-08-28T20:00:00Z")
         controller.onRadarUpdate(1.0, RideState.Idle, sunSettings)
         controller.onRadarUpdate(0.0, RideState.Idle, sunSettings)
         now += KarooRadarExtension.ALL_CLEAR_DELAY_MS + 1
 
         controller.onRadarUpdate(0.0, RideState.Idle, sunSettings)
 
-        assertEquals(emptyList<LightMode>(), effects.lightModes)
+        assertEquals(listOf(LightMode.STEADY_HIGH), effects.lightModes)
+    }
+
+    @Test
+    fun `all clear does not turn light off when sun state is unknown`() {
+        controller.onRadarUpdate(1.0, RideState.Idle, sunSettings)
+        controller.onRadarUpdate(0.0, RideState.Idle, sunSettings)
+        now += KarooRadarExtension.ALL_CLEAR_DELAY_MS + 1
+
+        controller.onRadarUpdate(0.0, RideState.Idle, sunSettings)
+
+        assertEquals(listOf(LightMode.STEADY_HIGH), effects.lightModes)
+        assertEquals(true, effects.lightLogs.any { it.contains("sunState=UNKNOWN") })
     }
 
     private fun updateSunTimes(sunrise: String, sunset: String) {
-        controller.onSunriseUpdated(time(sunrise), sunSettings)
-        controller.onSunsetUpdated(time(sunset), sunSettings)
+        controller.onSunTimesUpdated(
+            SunTimes(
+                sunriseTime = time(sunrise),
+                sunsetTime = time(sunset),
+            ),
+            sunSettings,
+        )
     }
 
     private fun time(value: String): Long = Instant.parse(value).toEpochMilli()
 
     private class FakeRadarAlertEffects : RadarAlertEffects {
         val lightModes = mutableListOf<LightMode>()
+        val lightLogs = mutableListOf<String>()
         var lightCommandSucceeds = true
 
         override fun wakeScreen() = Unit
@@ -132,6 +150,9 @@ class RadarAlertControllerTest {
         override fun playAllClearBeep(frequency: Int, duration: Int) = Unit
         override fun logThreatDetected() = Unit
         override fun logAllClear() = Unit
+        override fun logLightControl(message: String) {
+            lightLogs += message
+        }
 
         override fun setLightMode(mode: LightMode): Boolean {
             lightModes += mode

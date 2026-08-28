@@ -68,5 +68,6 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.color)
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.sunrise.sunset)
     testImplementation(libs.junit)
 }
