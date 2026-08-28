@@ -7,8 +7,7 @@ internal interface RadarAlertEffects {
     fun wakeScreen()
     fun playThreatBeep(frequency: Int, duration: Int, count: Int)
     fun playAllClearBeep(frequency: Int, duration: Int)
-    fun setLightMode(mode: LightMode)
-    fun forceLightOff()
+    fun setLightMode(mode: LightMode): Boolean
     fun logThreatDetected()
     fun logAllClear()
 }
@@ -17,10 +16,9 @@ internal data class RadarAlertState(
     val radarThreat: Boolean = false,
     val radarLightRequested: Boolean = false,
     val sunLightRequested: Boolean = false,
-    val appliedLightState: Boolean = false,
+    val appliedLightMode: LightMode? = null,
+    val lightControlActive: Boolean = false,
     val allClearStartedTime: Long = 0L,
-    val wasRidePaused: Boolean = false,
-    val isRidePaused: Boolean = false,
     val latestSunriseTime: Long = 0L,
     val latestSunsetTime: Long = 0L,
 )
@@ -32,59 +30,64 @@ internal class RadarAlertController(
 ) {
     private var state = RadarAlertState()
 
+    @Synchronized
     fun onRadarUpdate(
         threatLevel: Double,
         rideState: RideState,
         settings: RadarSettings,
     ) {
-        state = state.copy(isRidePaused = rideState is RideState.Paused)
-
         if (!settings.enabled) {
             state = state.copy(
                 allClearStartedTime = 0L,
                 radarThreat = threatLevel != 0.0,
-                wasRidePaused = state.isRidePaused,
             )
             return
         }
-
         if (state.radarThreat && threatLevel == 0.0) {
             state = state.copy(allClearStartedTime = clock())
         }
-
         val shouldHandleAllClear = shouldTriggerAllClear()
-
         handleLightState(threatLevel, settings, shouldHandleAllClear)
         if (!state.radarThreat && threatLevel > 0) {
             handleThreatDetected(threatLevel, settings, rideState)
         }
         handleSoundAllClearIfNeeded(settings, rideState, shouldHandleAllClear)
-
         if (shouldHandleAllClear) {
             state = state.copy(
                 radarLightRequested = false,
                 allClearStartedTime = 0L,
             )
         }
-
-        state = state.copy(
-            radarThreat = threatLevel != 0.0,
-            wasRidePaused = state.isRidePaused,
-        )
+        state = state.copy(radarThreat = threatLevel != 0.0)
     }
 
+    @Synchronized
     fun onSunriseUpdated(sunrise: Long, settings: RadarSettings) {
         state = state.copy(latestSunriseTime = sunrise)
         evaluateSunLightRequest(settings)
     }
 
+    @Synchronized
     fun onSunsetUpdated(sunset: Long, settings: RadarSettings) {
         state = state.copy(latestSunsetTime = sunset)
         evaluateSunLightRequest(settings)
     }
 
+    @Synchronized
     fun onSunTimerTick(settings: RadarSettings) {
         evaluateSunLightRequest(settings)
+    }
+
+    @Synchronized
+    fun onLightAvailable(settings: RadarSettings) {
+        state = state.copy(appliedLightMode = null)
+        evaluateSunLightRequest(settings)
+        updateLightState(settings)
+    }
+
+    @Synchronized
+    fun onLightUnavailable() {
+        state = state.copy(appliedLightMode = null)
     }
 
     private fun handleLightState(
@@ -93,34 +96,17 @@ internal class RadarAlertController(
         shouldHandleAllClear: Boolean,
     ) {
         if (!settings.lightControlEnabled) {
-            if (state.appliedLightState) {
-                effects.forceLightOff()
-            }
-            state = state.copy(
-                appliedLightState = false,
-                radarLightRequested = false,
-                sunLightRequested = false,
-            )
+            disableLightControl()
             return
         }
-
-        if (!state.wasRidePaused && state.isRidePaused) {
-            updateLightState(settings)
-        }
-
-        if (state.wasRidePaused && !state.isRidePaused) {
-            evaluateSunLightRequest(settings)
-            updateLightState(settings)
-        }
-
-        if (!state.radarThreat && threatLevel > 0 && !state.isRidePaused) {
+        if (!state.radarThreat && threatLevel > 0) {
             state = state.copy(
                 radarLightRequested = true,
+                lightControlActive = true,
                 allClearStartedTime = 0L,
             )
             updateLightState(settings)
         }
-
         if (threatLevel == 0.0 && shouldHandleAllClear) {
             handleLightAllClear(settings)
         }
@@ -173,27 +159,17 @@ internal class RadarAlertController(
             return
         }
         if (!settings.lightControlEnabled) {
-            if (state.appliedLightState) {
-                effects.forceLightOff()
-            }
-            state = state.copy(
-                sunLightRequested = false,
-                radarLightRequested = false,
-                appliedLightState = false,
-            )
+            disableLightControl()
             return
         }
         if (!settings.lightAutoBySunEnabled) {
-            if (state.sunLightRequested) {
-                state = state.copy(sunLightRequested = false)
-                updateLightState(settings)
-            }
+            state = state.copy(sunLightRequested = false)
+            updateLightState(settings)
             return
         }
         if (state.latestSunriseTime <= 0L || state.latestSunsetTime <= 0L) {
             return
         }
-
         val sunWindowActive = sunLightPolicy.isSunWindowActive(
             now = clock(),
             sunriseTime = state.latestSunriseTime,
@@ -201,27 +177,51 @@ internal class RadarAlertController(
             sunriseOffsetMinutes = settings.lightSunriseOffsetMinutes,
             sunsetOffsetMinutes = settings.lightSunsetOffsetMinutes,
         )
-
-        if (state.sunLightRequested != sunWindowActive) {
-            state = state.copy(sunLightRequested = sunWindowActive)
-            updateLightState(settings)
-        }
+        state = state.copy(
+            sunLightRequested = sunWindowActive,
+            lightControlActive = true,
+        )
+        updateLightState(settings)
     }
 
     private fun updateLightState(settings: RadarSettings) {
-        if (!settings.enabled || !settings.lightControlEnabled) {
+        if (!settings.enabled || !settings.lightControlEnabled || !state.lightControlActive) {
             return
         }
-        val shouldBeOn = !state.isRidePaused && (state.radarLightRequested || state.sunLightRequested)
-        if (shouldBeOn == state.appliedLightState) {
-            return
-        }
-        if (shouldBeOn) {
-            effects.setLightMode(settings.lightControlMode)
+        val requestedMode = if (state.radarLightRequested || state.sunLightRequested) {
+            settings.lightControlMode
         } else {
-            effects.forceLightOff()
+            LightMode.OFF
         }
-        state = state.copy(appliedLightState = shouldBeOn)
+        if (requestedMode == state.appliedLightMode) {
+            return
+        }
+        if (effects.setLightMode(requestedMode)) {
+            state = state.copy(
+                appliedLightMode = requestedMode,
+                lightControlActive = requestedMode != LightMode.OFF || settings.lightAutoBySunEnabled,
+            )
+        }
+    }
+
+    private fun disableLightControl() {
+        val shouldTurnOff = state.lightControlActive ||
+            (state.appliedLightMode != null && state.appliedLightMode != LightMode.OFF)
+        if (!shouldTurnOff) {
+            state = state.copy(
+                radarLightRequested = false,
+                sunLightRequested = false,
+                lightControlActive = false,
+            )
+            return
+        }
+        val lightTurnedOff = state.appliedLightMode == LightMode.OFF || effects.setLightMode(LightMode.OFF)
+        state = state.copy(
+            radarLightRequested = false,
+            sunLightRequested = false,
+            appliedLightMode = if (lightTurnedOff) LightMode.OFF else state.appliedLightMode,
+            lightControlActive = !lightTurnedOff,
+        )
     }
 
     private fun shouldTriggerAllClear(): Boolean {

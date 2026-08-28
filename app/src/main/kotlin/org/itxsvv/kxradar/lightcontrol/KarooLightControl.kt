@@ -22,7 +22,10 @@ import android.os.Parcelable
  *   Transaction 3: setLightMode(id: String, device: Device?, bundle: Bundle)
  *     - Bundle contains LightMode parcelable (writeToParcel writes enum name as string)
  */
-class KarooLightControl(private val context: Context) {
+class KarooLightControl(
+    private val context: Context,
+    private val onConnectionChanged: (Boolean) -> Unit = {},
+) {
 
     companion object {
         private const val TAG = "KarooLightControl"
@@ -47,12 +50,14 @@ class KarooLightControl(private val context: Context) {
                 getLightCommandBinder(service)
                 loadLightModeClass()
             }
+            onConnectionChanged(isConnected())
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
             sensorBinder = null
             lightCmdBinder = null
             isBound = false
+            onConnectionChanged(false)
             Log.d(TAG, "Disconnected from SensorService")
         }
     }

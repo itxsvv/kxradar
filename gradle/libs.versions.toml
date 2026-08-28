@@ -13,6 +13,7 @@ glance = "1.1.1"
 kotlinxSerializationJson = "1.7.3"
 navigationRuntimeKtx = "2.8.4"
 navigationCompose = "2.8.4"
+junit = "4.13.2"
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -42,6 +43,7 @@ androidx-glance-preview = { group = "androidx.glance", name = "glance-preview", 
 androidx-navigation-runtime-ktx = { group = "androidx.navigation", name = "navigation-runtime-ktx", version.ref = "navigationRuntimeKtx" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+junit = { module = "junit:junit", version.ref = "junit" }
 
 [bundles]
 androidx-lifeycle = ["androidx-lifecycle-runtime-compose", "androidx-lifecycle-viewmodel-compose"]

@@ -15,8 +15,8 @@ android {
         applicationId = "org.itxsvv.kxradar"
         minSdk = 26
         targetSdk = 34
-        versionCode = 7
-        versionName = "1.0.7"
+        versionCode = 8
+        versionName = "1.0.8"
     }
 
     signingConfigs {
@@ -68,4 +68,5 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.color)
     implementation(libs.androidx.datastore.preferences)
+    testImplementation(libs.junit)
 }
