@@ -16,7 +16,7 @@ import android.os.Parcelable
  * Controls ANT+ bike lights through Karoo's internal SensorService AIDL.
  *
  * SensorServiceAIDL (descriptor: io.hammerhead.sensorservice.SensorServiceAIDL):
- *   Transaction 17: getLightCommandConnection() → returns IBinder
+ *   Transaction 17 on older firmware, 18 on Karoo 1.663.2548: getLightCommandConnection() → returns IBinder
  *
  * LightCommandConnectionAIDL (descriptor: io.hammerhead.sensorservice.LightCommandConnectionAIDL):
  *   Transaction 3: setLightMode(id: String, device: Device?, bundle: Bundle)
@@ -32,6 +32,7 @@ class KarooLightControl(
         private const val SENSOR_DESCRIPTOR = "io.hammerhead.sensorservice.SensorServiceAIDL"
         private const val LIGHT_CMD_DESCRIPTOR = "io.hammerhead.sensorservice.LightCommandConnectionAIDL"
         private const val TX_GET_LIGHT_CMD = 17
+        private const val MAX_TX_SHIFT = 2
         private const val TX_SET_LIGHT_MODE = 3
     }
 
@@ -63,17 +64,41 @@ class KarooLightControl(
     }
 
     private fun getLightCommandBinder(service: IBinder) {
+        lightCmdBinder = null
+        for (shift in 0..MAX_TX_SHIFT) {
+            val code = TX_GET_LIGHT_CMD + shift
+            val binder = fetchBinder(service, code) ?: continue
+            val descriptor = try {
+                binder.interfaceDescriptor
+            } catch (e: Exception) {
+                Log.d(TAG, "Failed to read binder descriptor for transaction $code", e)
+                null
+            }
+            if (descriptor == LIGHT_CMD_DESCRIPTOR) {
+                lightCmdBinder = binder
+                Log.d(TAG, "Got LightCommand binder at transaction $code")
+                return
+            }
+            Log.d(TAG, "Transaction $code returned interface $descriptor")
+        }
+        Log.d(TAG, "LightCommand binder not found")
+    }
+
+    private fun fetchBinder(service: IBinder, code: Int): IBinder? {
         val data = Parcel.obtain()
         val reply = Parcel.obtain()
-        try {
+        return try {
             data.writeInterfaceToken(SENSOR_DESCRIPTOR)
-            // Transaction 17 is a simple getter — no params after enforceInterface
-            service.transact(TX_GET_LIGHT_CMD, data, reply, 0)
-            reply.readException()
-            lightCmdBinder = reply.readStrongBinder()
-            Log.d(TAG, "Got LightCommand binder: $lightCmdBinder")
+            if (!service.transact(code, data, reply, 0)) {
+                Log.d(TAG, "Transaction $code was not handled")
+                null
+            } else {
+                reply.readException()
+                reply.readStrongBinder()
+            }
         } catch (e: Exception) {
-            Log.d(TAG, "Failed to get LightCommand binder")
+            Log.d(TAG, "Failed to get binder at transaction $code", e)
+            null
         } finally {
             data.recycle()
             reply.recycle()
