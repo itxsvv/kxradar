@@ -128,8 +128,71 @@ class RadarAlertControllerTest {
         assertEquals(true, effects.lightLogs.any { it.contains("sunState=UNKNOWN") })
     }
 
-    private fun updateSunTimes(sunrise: String, sunset: String) {
-        controller.onSunTimesUpdated(
+    @Test
+    fun `no all-clear while the delay has not elapsed`() {
+        val settings = RadarSettings()
+        controller.onRadarUpdate(1.0, RideState.Idle, settings)
+        controller.onRadarUpdate(0.0, RideState.Idle, settings)
+        now += KarooRadarExtension.ALL_CLEAR_DELAY_MS
+
+        controller.onRadarUpdate(0.0, RideState.Idle, settings)
+
+        assertEquals(0, effects.allClearBeeps)
+    }
+
+    @Test
+    fun `a threat returning before the delay cancels the all-clear and restarts it`() {
+        val settings = RadarSettings()
+        controller.onRadarUpdate(1.0, RideState.Idle, settings)
+        controller.onRadarUpdate(0.0, RideState.Idle, settings)
+        now += KarooRadarExtension.ALL_CLEAR_DELAY_MS - 1
+
+        controller.onRadarUpdate(1.0, RideState.Idle, settings)
+        now += KarooRadarExtension.ALL_CLEAR_DELAY_MS + 1
+        controller.onRadarUpdate(0.0, RideState.Idle, settings)
+
+        assertEquals(0, effects.allClearBeeps)
+        assertEquals(2, effects.threatBeeps)
+    }
+
+    @Test
+    fun `an all-clear that came due plays on the next update even if that is a threat`() {
+        val settings = RadarSettings()
+        controller.onRadarUpdate(1.0, RideState.Idle, settings)
+        controller.onRadarUpdate(0.0, RideState.Idle, settings)
+        now += KarooRadarExtension.ALL_CLEAR_DELAY_MS + 1
+
+        controller.onRadarUpdate(1.0, RideState.Idle, settings)
+
+        assertEquals(1, effects.allClearBeeps)
+        assertEquals(2, effects.threatBeeps)
+    }
+
+    @Test
+    fun `turning light control off turns a lit light off`() {
+        now = time("2026-08-28T20:00:00Z")
+        updateSunTimes("2026-08-28T06:00:00Z", "2026-08-28T18:00:00Z")
+
+        controller.onRadarUpdate(
+            0.0,
+            RideState.Idle,
+            sunSettings.copy(lightControlEnabled = false),
+        )
+
+        assertEquals(listOf(LightMode.STEADY_HIGH, LightMode.OFF), effects.lightModes)
+    }
+
+    @Test
+    fun `the light mode is not sent again while it is unchanged`() {
+        now = time("2026-08-28T20:00:00Z")
+        updateSunTimes("2026-08-28T06:00:00Z", "2026-08-28T18:00:00Z")
+
+        controller.onSunTimerTick(sunSettings)
+
+        assertEquals(listOf(LightMode.STEADY_HIGH), effects.lightModes)
+    }
+
+    private fun updateSunTimes(sunrise: String, sunset: String) {        controller.onSunTimesUpdated(
             SunTimes(
                 sunriseTime = time(sunrise),
                 sunsetTime = time(sunset),
@@ -144,10 +207,18 @@ class RadarAlertControllerTest {
         val lightModes = mutableListOf<LightMode>()
         val lightLogs = mutableListOf<String>()
         var lightCommandSucceeds = true
+        var threatBeeps = 0
+        var allClearBeeps = 0
 
         override fun wakeScreen() = Unit
-        override fun playThreatBeep(frequency: Int, duration: Int, count: Int) = Unit
-        override fun playAllClearBeep(frequency: Int, duration: Int) = Unit
+        override fun playThreatBeep(frequency: Int, duration: Int, count: Int) {
+            threatBeeps++
+        }
+
+        override fun playAllClearBeep(frequency: Int, duration: Int) {
+            allClearBeeps++
+        }
+
         override fun logThreatDetected() = Unit
         override fun logAllClear() = Unit
         override fun logLightControl(message: String) {
